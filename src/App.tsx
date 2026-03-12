@@ -101,7 +101,7 @@ const PROJECTS: Project[] = [
 ];
 
 const LOGO_URL = "./input_file_21.png";
-const PHONE_NUMBER = "01017919385";
+const PHONE_NUMBER = "201017919385";
 
 // --- Components ---
 
