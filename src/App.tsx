@@ -297,17 +297,14 @@ const About = () => {
                 referrerPolicy="no-referrer"
               />
             </div>
-            <div className="absolute -bottom-10 -right-10 w-64 h-64 bg-brand-light rounded-full -z-0 opacity-20 blur-3xl"></div>
-            <div className="absolute -top-10 -left-10 w-48 h-48 bg-brand-orange rounded-full -z-0 opacity-10 blur-2xl"></div>
-            
-            <div className="absolute top-10 right-10 glass p-6 rounded-2xl shadow-xl z-20 hidden md:block">
-              <div className="flex items-center gap-4">
-                <div className="bg-brand-blue text-white p-3 rounded-xl">
-                  <Star fill="currentColor" />
+            <div className="absolute top-4 right-4 md:top-10 md:right-10 glass p-4 md:p-6 rounded-2xl shadow-xl z-20">
+              <div className="flex items-center gap-3 md:gap-4">
+                <div className="bg-brand-blue text-white p-2 md:p-3 rounded-xl">
+                  <Star fill="currentColor" className="w-5 h-5 md:w-6 md:h-6" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-brand-blue">خبرة</p>
-                  <p className="text-sm text-gray-600">طويلة في السوق</p>
+                  <p className="text-xl md:text-2xl font-bold text-brand-blue">خبرة</p>
+                  <p className="text-xs md:text-sm text-gray-600">طويلة في السوق</p>
                 </div>
               </div>
             </div>
