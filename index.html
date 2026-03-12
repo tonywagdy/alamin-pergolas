@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>الأمين للبرجولات</title>
+    <script>
+      // Fix for "Cannot set property fetch of #<Window> which has only a getter"
+      // This error occurs when formdata-polyfill tries to monkey-patch a read-only fetch property.
+      if (typeof window !== 'undefined' && typeof FormData !== 'undefined' && !FormData.prototype.keys) {
+        Object.defineProperty(FormData.prototype, 'keys', {
+          value: function* () { },
+          writable: true,
+          configurable: true
+        });
+        Object.defineProperty(FormData.prototype, 'values', {
+          value: function* () { },
+          writable: true,
+          configurable: true
+        });
+        Object.defineProperty(FormData.prototype, 'entries', {
+          value: function* () { },
+          writable: true,
+          configurable: true
+        });
+        if (typeof Symbol !== 'undefined' && Symbol.iterator) {
+          Object.defineProperty(FormData.prototype, Symbol.iterator, {
+            value: function* () { },
+            writable: true,
+            configurable: true
+          });
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

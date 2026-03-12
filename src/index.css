@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Amiri", serif;
+  
+  --color-brand-blue: #143d6a;
+  --color-brand-orange: #f39c12;
+  --color-brand-light: #ffcc33;
+  --color-sand: #f8f9fa;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-sand);
+  color: var(--color-brand-blue);
+  direction: rtl;
+}
+
+.serif {
+  font-family: var(--font-serif);
+}
+
+/* Custom utility for glass effect */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+}
