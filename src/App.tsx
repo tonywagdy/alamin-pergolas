@@ -50,57 +50,57 @@ const SERVICES: Service[] = [
     title: "برجولات حدائق",
     description: "تصاميم كلاسيكية وعصرية تضفي لمسة جمالية على حديقتك وتوفر ظلاً مثالياً.",
     icon: <TreePine className="w-8 h-8" />,
-    image: "input_file_0.jpg"
+    image: "./input_file_0.jpg"
   },
   {
     id: 2,
     title: "برجولات روف",
     description: "استغل مساحة السطح وحولها إلى واحة من الراحة والجمال مع تصاميمنا المبتكرة.",
     icon: <Sun className="w-8 h-8" />,
-    image: "input_file_1.jpg"
+    image: "./input_file_1.jpg"
   },
   {
     id: 3,
     title: "أسقف ديكورية",
     description: "تركيب أسقف خشبية داخلية وخارجية بتفاصيل فنية دقيقة تعكس الفخامة.",
     icon: <Hammer className="w-8 h-8" />,
-    image: "input_file_2.jpg"
+    image: "./input_file_2.jpg"
   },
   {
     id: 4,
     title: "صيانة وتجديد",
     description: "خدمات صيانة دورية ودهانات مقاومة للعوامل الجوية للحفاظ على جمال الخشب.",
     icon: <ShieldCheck className="w-8 h-8" />,
-    image: "input_file_3.jpg"
+    image: "./input_file_3.jpg"
   }
 ];
 
 const PROJECTS: Project[] = [
-  { id: 0, title: "تصميم عصري بإضاءة", category: "برجولات حدائق", image: "input_file_0.jpg" },
-  { id: 1, title: "برجولة خشبية فخمة", category: "برجولات حدائق", image: "input_file_1.jpg" },
-  { id: 2, title: "روف بتصميم هندسي", category: "برجولات روف", image: "input_file_2.jpg" },
-  { id: 3, title: "إضاءة ليلية ساحرة", category: "برجولات حدائق", image: "input_file_3.jpg" },
-  { id: 4, title: "جلسة خارجية مريحة", category: "برجولات حدائق", image: "input_file_4.jpg" },
-  { id: 5, title: "تصميم روف مفتوح", category: "برجولات روف", image: "input_file_5.jpg" },
-  { id: 6, title: "برجولة خشبية كلاسيك", category: "برجولات حدائق", image: "input_file_6.jpg" },
-  { id: 7, title: "أعمال خشبية داخلية", category: "ديكورات خشبية", image: "input_file_7.jpg" },
-  { id: 8, title: "برجولة مودرن", category: "برجولات حدائق", image: "input_file_8.jpg" },
-  { id: 9, title: "تصميم روف متكامل", category: "برجولات روف", image: "input_file_9.jpg" },
-  { id: 10, title: "برجولة حديقة واسعة", category: "برجولات حدائق", image: "input_file_10.jpg" },
-  { id: 11, title: "ديكورات أسقف خشبية", category: "أسقف ديكورية", image: "input_file_11.jpg" },
-  { id: 12, title: "برجولة روف مميزة", category: "برجولات روف", image: "input_file_12.jpg" },
-  { id: 13, title: "تصميم هندسي فريد", category: "برجولات حدائق", image: "input_file_13.jpg" },
-  { id: 14, title: "جلسة روف هادئة", category: "برجولات روف", image: "input_file_14.jpg" },
-  { id: 15, title: "برجولة سداسية", category: "برجولات حدائق", image: "input_file_15.jpg" },
-  { id: 16, title: "أبواب خشبية مودرن", category: "أعمال خشبية", image: "input_file_16.jpg" },
-  { id: 17, title: "برجولة روف مغلقة", category: "برجولات روف", image: "input_file_17.jpg" },
-  { id: 18, title: "جلسة حديقة كلاسيكية", category: "برجولات حدائق", image: "input_file_18.jpg" },
-  { id: 19, title: "برجولة ثمانية فخمة", category: "برجولات حدائق", image: "input_file_19.jpg" },
-  { id: 20, title: "أعمال تجليد حوائط", category: "ديكورات خشبية", image: "input_file_20.jpg" },
-  { id: 22, title: "أرجوحة خشبية", category: "أعمال خشبية", image: "input_file_22.jpg" },
+  { id: 0, title: "تصميم عصري بإضاءة", category: "برجولات حدائق", image: "./input_file_0.jpg" },
+  { id: 1, title: "برجولة خشبية فخمة", category: "برجولات حدائق", image: "./input_file_1.jpg" },
+  { id: 2, title: "روف بتصميم هندسي", category: "برجولات روف", image: "./input_file_2.jpg" },
+  { id: 3, title: "إضاءة ليلية ساحرة", category: "برجولات حدائق", image: "./input_file_3.jpg" },
+  { id: 4, title: "جلسة خارجية مريحة", category: "برجولات حدائق", image: "./input_file_4.jpg" },
+  { id: 5, title: "تصميم روف مفتوح", category: "برجولات روف", image: "./input_file_5.jpg" },
+  { id: 6, title: "برجولة خشبية كلاسيك", category: "برجولات حدائق", image: "./input_file_6.jpg" },
+  { id: 7, title: "أعمال خشبية داخلية", category: "ديكورات خشبية", image: "./input_file_7.jpg" },
+  { id: 8, title: "برجولة مودرن", category: "برجولات حدائق", image: "./input_file_8.jpg" },
+  { id: 9, title: "تصميم روف متكامل", category: "برجولات روف", image: "./input_file_9.jpg" },
+  { id: 10, title: "برجولة حديقة واسعة", category: "برجولات حدائق", image: "./input_file_10.jpg" },
+  { id: 11, title: "ديكورات أسقف خشبية", category: "أسقف ديكورية", image: "./input_file_11.jpg" },
+  { id: 12, title: "برجولة روف مميزة", category: "برجولات روف", image: "./input_file_12.jpg" },
+  { id: 13, title: "تصميم هندسي فريد", category: "برجولات حدائق", image: "./input_file_13.jpg" },
+  { id: 14, title: "جلسة روف هادئة", category: "برجولات روف", image: "./input_file_14.jpg" },
+  { id: 15, title: "برجولة سداسية", category: "برجولات حدائق", image: "./input_file_15.jpg" },
+  { id: 16, title: "أبواب خشبية مودرن", category: "أعمال خشبية", image: "./input_file_16.jpg" },
+  { id: 17, title: "برجولة روف مغلقة", category: "برجولات روف", image: "./input_file_17.jpg" },
+  { id: 18, title: "جلسة حديقة كلاسيكية", category: "برجولات حدائق", image: "./input_file_18.jpg" },
+  { id: 19, title: "برجولة ثمانية فخمة", category: "برجولات حدائق", image: "./input_file_19.jpg" },
+  { id: 20, title: "أعمال تجليد حوائط", category: "ديكورات خشبية", image: "./input_file_20.jpg" },
+  { id: 22, title: "أرجوحة خشبية", category: "أعمال خشبية", image: "./input_file_22.jpg" },
 ];
 
-const LOGO_URL = "input_file_21.png";
+const LOGO_URL = "./input_file_21.png";
 const PHONE_NUMBER = "01017919385";
 
 // --- Components ---
