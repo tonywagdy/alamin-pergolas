@@ -1,0 +1,60 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: gallery
+    // Document ID: auto-generated
+    // Fields:
+    //   - title: string (required, max 100 chars)
+    //   - category: string (required, max 50 chars)
+    //   - image: string (required, base64 or URL, max 800000 chars to fit in 1MB limit)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+             request.auth.token.email == "twagdy067@gmail.com" && 
+             request.auth.token.email_verified == true;
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidGalleryItem(data) {
+      return hasOnlyAllowedFields(['title', 'category', 'image', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 100 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 50 &&
+             data.image is string && data.image.size() > 0 && data.image.size() <= 800000 &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /gallery/{itemId} {
+      // Anyone can read the gallery
+      allow read: if true;
+      
+      // Only the admin can create, update, or delete gallery items
+      allow create: if isAdmin() && isValidGalleryItem(request.resource.data);
+      allow update: if isAdmin() && isValidGalleryItem(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}
