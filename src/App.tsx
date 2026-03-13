@@ -24,8 +24,17 @@ import {
   MessageCircle,
   Send,
   Bot,
-  User
+  User,
+  Trash2,
+  Upload,
+  ImagePlus,
+  LogOut,
+  LogIn
 } from 'lucide-react';
+
+import { db, auth } from './firebase';
+import { collection, onSnapshot, addDoc, deleteDoc, doc, Timestamp, query, orderBy } from 'firebase/firestore';
+import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 // --- Types ---
 interface Service {
@@ -101,7 +110,7 @@ const PROJECTS: Project[] = [
 ];
 
 const LOGO_URL = "./input_file_21.png";
-const PHONE_NUMBER = "201017919385";
+const PHONE_NUMBER = "201017919385"; // Added country code (20) for WhatsApp links
 
 // --- Components ---
 
@@ -239,6 +248,46 @@ const Services = () => {
 };
 
 const Gallery = () => {
+  const [firestoreProjects, setFirestoreProjects] = useState<any[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      setIsAdmin(!!user);
+    });
+
+    const q = query(collection(db, 'gallery'), orderBy('createdAt', 'desc'));
+    const unsubscribeDb = onSnapshot(q, (snapshot) => {
+      const items = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setFirestoreProjects(items);
+    }, (error) => {
+      console.error("Error fetching gallery:", error);
+    });
+
+    return () => {
+      unsubscribeAuth();
+      unsubscribeDb();
+    };
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    // We use a custom modal or just window.confirm for now, though iframe blocks it sometimes.
+    // Let's just delete it directly or use a custom state, but since it's admin only, we can just delete it.
+    try {
+      await deleteDoc(doc(db, 'gallery', id));
+    } catch (error) {
+      console.error("Delete failed", error);
+    }
+  };
+
+  const allProjects = [
+    ...firestoreProjects.map(p => ({ id: p.id, title: p.title, category: p.category, image: p.image, isFirestore: true })),
+    ...PROJECTS.map(p => ({ ...p, isFirestore: false }))
+  ];
+
   return (
     <section id="gallery" className="py-24 bg-sand">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -253,12 +302,12 @@ const Gallery = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {PROJECTS.map((project, index) => (
+          {allProjects.map((project, index) => (
             <motion.div
               key={project.id}
               initial={{ opacity: 0, scale: 0.9 }}
               whileInView={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: (index % 6) * 0.1 }}
               className="relative group overflow-hidden rounded-3xl aspect-[4/3] shadow-md"
             >
               <img 
@@ -271,6 +320,15 @@ const Gallery = () => {
                 <span className="text-sm font-medium text-brand-light mb-2">{project.category}</span>
                 <h4 className="text-2xl font-bold">{project.title}</h4>
               </div>
+              {isAdmin && project.isFirestore && (
+                <button 
+                  onClick={() => handleDelete(project.id as string)}
+                  className="absolute top-4 left-4 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 z-10"
+                  title="حذف الصورة"
+                >
+                  <Trash2 size={18} />
+                </button>
+              )}
             </motion.div>
           ))}
         </div>
@@ -297,6 +355,9 @@ const About = () => {
                 referrerPolicy="no-referrer"
               />
             </div>
+            <div className="absolute -bottom-10 -right-10 w-64 h-64 bg-brand-light rounded-full -z-0 opacity-20 blur-3xl"></div>
+            <div className="absolute -top-10 -left-10 w-48 h-48 bg-brand-orange rounded-full -z-0 opacity-10 blur-2xl"></div>
+            
             <div className="absolute top-4 right-4 md:top-10 md:right-10 glass p-4 md:p-6 rounded-2xl shadow-xl z-20">
               <div className="flex items-center gap-3 md:gap-4">
                 <div className="bg-brand-blue text-white p-2 md:p-3 rounded-xl">
@@ -633,6 +694,161 @@ const AIChatbot = () => {
   );
 };
 
+const AdminPanel = () => {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('برجولات حدائق');
+  const [image, setImage] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Login failed", error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const img = new Image();
+        img.src = reader.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          setImage(dataUrl);
+        };
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || !category || !image) return;
+    setIsUploading(true);
+    try {
+      await addDoc(collection(db, 'gallery'), {
+        title,
+        category,
+        image,
+        createdAt: Timestamp.now()
+      });
+      setTitle('');
+      setImage('');
+      setIsOpen(false);
+    } catch (error) {
+      console.error("Upload failed", error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  if (!user) {
+    return (
+      <div className="fixed bottom-8 left-8 z-40">
+        <button onClick={handleLogin} className="bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition-colors" title="تسجيل دخول الإدارة">
+          <LogIn size={20} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed bottom-8 left-8 z-40 flex flex-col items-start gap-4">
+      <div className="flex gap-2">
+        <button onClick={() => setIsOpen(!isOpen)} className="bg-brand-blue text-white px-4 py-2 rounded-full shadow-lg hover:bg-brand-orange transition-colors flex items-center gap-2">
+          <ImagePlus size={20} /> إضافة صورة
+        </button>
+        <button onClick={handleLogout} className="bg-red-500 text-white p-2 rounded-full shadow-lg hover:bg-red-600 transition-colors" title="تسجيل خروج">
+          <LogOut size={20} />
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="bg-white p-6 rounded-2xl shadow-2xl w-80 border border-gray-100"
+          >
+            <h3 className="text-xl font-bold text-brand-blue mb-4 text-right">إضافة عمل جديد</h3>
+            <form onSubmit={handleUpload} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 text-right">اسم العمل</label>
+                <input type="text" value={title} onChange={e => setTitle(e.target.value)} required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-right" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 text-right">القسم</label>
+                <select value={category} onChange={e => setCategory(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-right" dir="rtl">
+                  <option value="برجولات حدائق">برجولات حدائق</option>
+                  <option value="برجولات روف">برجولات روف</option>
+                  <option value="أسقف ديكورية">أسقف ديكورية</option>
+                  <option value="أعمال خشبية">أعمال خشبية</option>
+                  <option value="ديكورات خشبية">ديكورات خشبية</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 text-right">الصورة</label>
+                <input type="file" accept="image/*" onChange={handleImageChange} required className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-brand-light file:text-brand-blue hover:file:bg-brand-orange hover:file:text-white text-right" />
+              </div>
+              {image && (
+                <div className="mt-2 rounded-lg overflow-hidden h-32">
+                  <img src={image} alt="Preview" className="w-full h-full object-cover" />
+                </div>
+              )}
+              <button type="submit" disabled={isUploading} className="w-full bg-brand-orange text-white py-2 rounded-lg font-bold hover:bg-brand-blue transition-colors disabled:opacity-50 flex justify-center items-center gap-2">
+                {isUploading ? 'جاري الرفع...' : <><Upload size={18} /> رفع الصورة</>}
+              </button>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 export default function App() {
   return (
     <div className="min-h-screen">
@@ -645,6 +861,7 @@ export default function App() {
       <Footer />
       <WhatsAppButton />
       <AIChatbot />
+      <AdminPanel />
     </div>
   );
 }
