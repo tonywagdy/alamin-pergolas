@@ -254,7 +254,7 @@ const Gallery = () => {
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      setIsAdmin(!!user);
+      setIsAdmin(user?.email === 'twagdy067@gmail.com');
     });
 
     const q = query(collection(db, 'gallery'), orderBy('createdAt', 'desc'));
@@ -710,12 +710,31 @@ const AdminPanel = () => {
   const [category, setCategory] = useState('برجولات حدائق');
   const [image, setImage] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+    const checkHash = () => setShowLogin(window.location.hash === '#admin');
+    checkHash();
+    window.addEventListener('hashchange', checkHash);
+
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        if (currentUser.email === 'twagdy067@gmail.com') {
+          setUser(currentUser);
+        } else {
+          await signOut(auth);
+          alert('عذراً، هذا الحساب غير مصرح له بالدخول للوحة الإدارة.');
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
     });
-    return () => unsubscribe();
+    
+    return () => {
+      window.removeEventListener('hashchange', checkHash);
+      unsubscribe();
+    };
   }, []);
 
   const handleLogin = async () => {
@@ -794,6 +813,8 @@ const AdminPanel = () => {
   };
 
   if (!user) {
+    if (!showLogin) return null;
+
     return (
       <div className="fixed bottom-28 right-8 z-40">
         <button onClick={handleLogin} className="bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition-colors" title="تسجيل دخول الإدارة">
