@@ -786,7 +786,7 @@ const AdminPanel = () => {
 
   if (!user) {
     return (
-      <div className="fixed bottom-8 left-8 z-40">
+      <div className="fixed bottom-8 right-8 z-40">
         <button onClick={handleLogin} className="bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition-colors" title="تسجيل دخول الإدارة">
           <LogIn size={20} />
         </button>
@@ -795,7 +795,7 @@ const AdminPanel = () => {
   }
 
   return (
-    <div className="fixed bottom-8 left-8 z-40 flex flex-col items-start gap-4">
+    <div className="fixed bottom-8 right-8 z-40 flex flex-col items-end gap-4">
       <div className="flex gap-2">
         <button onClick={() => setIsOpen(!isOpen)} className="bg-brand-blue text-white px-4 py-2 rounded-full shadow-lg hover:bg-brand-orange transition-colors flex items-center gap-2">
           <ImagePlus size={20} /> إضافة صورة
