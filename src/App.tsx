@@ -1,84 +1,57 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI } from "@google/genai";
 import { 
-  Hammer, 
-  TreePine, 
-  Sun, 
-  ShieldCheck, 
   Phone, 
   Mail, 
   MapPin, 
-  Instagram, 
-  Facebook, 
+  ChevronLeft, 
   Menu, 
-  X,
-  ArrowLeft,
-  CheckCircle2,
+  X, 
+  Hammer, 
+  Sun, 
+  ShieldCheck, 
   Star,
   MessageCircle,
   Send,
-  Bot,
-  User,
-  Trash2,
+  LogIn,
+  LogOut,
   Upload,
   ImagePlus,
-  LogOut,
-  LogIn
+  Trash2
 } from 'lucide-react';
 
 import { db, auth } from './firebase';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, Timestamp, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, deleteDoc, setDoc, doc, Timestamp, query, orderBy } from 'firebase/firestore';
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 // --- Types ---
-interface Service {
-  id: number;
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  image: string;
-}
-
 interface Project {
-  id: number;
+  id: number | string;
   title: string;
   category: string;
   image: string;
+  isFirestore?: boolean;
 }
 
-// --- Data ---
-const SERVICES: Service[] = [
+// --- Constants ---
+const PHONE_NUMBER = "201201177385";
+
+const SERVICES = [
   {
-    id: 1,
-    title: "برجولات حدائق",
-    description: "تصاميم كلاسيكية وعصرية تضفي لمسة جمالية على حديقتك وتوفر ظلاً مثالياً.",
-    icon: <TreePine className="w-8 h-8" />,
+    title: "برجولات خشبية",
+    description: "تصميم وتنفيذ أحدث البرجولات الخشبية للحدائق والأسطح بأجود أنواع الأخشاب المقاومة للعوامل الجوية.",
+    icon: <Hammer className="w-8 h-8" />,
     image: "./input_file_0.jpg"
   },
   {
-    id: 2,
-    title: "برجولات روف",
-    description: "استغل مساحة السطح وحولها إلى واحة من الراحة والجمال مع تصاميمنا المبتكرة.",
+    title: "أسقف ديكورية",
+    description: "تركيب أسقف معلقة وديكورية تضفي لمسة جمالية وفخامة للمساحات الداخلية والخارجية.",
     icon: <Sun className="w-8 h-8" />,
     image: "./input_file_1.jpg"
   },
   {
-    id: 3,
-    title: "أسقف ديكورية",
-    description: "تركيب أسقف خشبية داخلية وخارجية بتفاصيل فنية دقيقة تعكس الفخامة.",
-    icon: <Hammer className="w-8 h-8" />,
-    image: "./input_file_2.jpg"
-  },
-  {
-    id: 4,
     title: "صيانة وتجديد",
-    description: "خدمات صيانة دورية ودهانات مقاومة للعوامل الجوية للحفاظ على جمال الخشب.",
+    description: "خدمات متكاملة لصيانة وتجديد البرجولات والأعمال الخشبية لتعود كأنها جديدة.",
     icon: <ShieldCheck className="w-8 h-8" />,
     image: "./input_file_3.jpg"
   }
@@ -90,74 +63,67 @@ const PROJECTS: Project[] = [
   { id: 2, title: "روف بتصميم هندسي", category: "برجولات روف", image: "./input_file_2.jpg" },
   { id: 3, title: "إضاءة ليلية ساحرة", category: "برجولات حدائق", image: "./input_file_3.jpg" },
   { id: 4, title: "جلسة خارجية مريحة", category: "برجولات حدائق", image: "./input_file_4.jpg" },
-  { id: 5, title: "تصميم روف مفتوح", category: "برجولات روف", image: "./input_file_5.jpg" },
-  { id: 6, title: "برجولة خشبية كلاسيك", category: "برجولات حدائق", image: "./input_file_6.jpg" },
-  { id: 7, title: "أعمال خشبية داخلية", category: "ديكورات خشبية", image: "./input_file_7.jpg" },
-  { id: 8, title: "برجولة مودرن", category: "برجولات حدائق", image: "./input_file_8.jpg" },
-  { id: 9, title: "تصميم روف متكامل", category: "برجولات روف", image: "./input_file_9.jpg" },
-  { id: 10, title: "برجولة حديقة واسعة", category: "برجولات حدائق", image: "./input_file_10.jpg" },
-  { id: 11, title: "ديكورات أسقف خشبية", category: "أسقف ديكورية", image: "./input_file_11.jpg" },
-  { id: 12, title: "برجولة روف مميزة", category: "برجولات روف", image: "./input_file_12.jpg" },
-  { id: 13, title: "تصميم هندسي فريد", category: "برجولات حدائق", image: "./input_file_13.jpg" },
-  { id: 14, title: "جلسة روف هادئة", category: "برجولات روف", image: "./input_file_14.jpg" },
-  { id: 15, title: "برجولة سداسية", category: "برجولات حدائق", image: "./input_file_15.jpg" },
-  { id: 16, title: "أبواب خشبية مودرن", category: "أعمال خشبية", image: "./input_file_16.jpg" },
-  { id: 17, title: "برجولة روف مغلقة", category: "برجولات روف", image: "./input_file_17.jpg" },
-  { id: 18, title: "جلسة حديقة كلاسيكية", category: "برجولات حدائق", image: "./input_file_18.jpg" },
-  { id: 19, title: "برجولة ثمانية فخمة", category: "برجولات حدائق", image: "./input_file_19.jpg" },
-  { id: 20, title: "أعمال تجليد حوائط", category: "ديكورات خشبية", image: "./input_file_20.jpg" },
-  { id: 22, title: "أرجوحة خشبية", category: "أعمال خشبية", image: "./input_file_22.jpg" },
 ];
-
-const LOGO_URL = "./input_file_21.png";
-const PHONE_NUMBER = "201017919385"; // Added country code (20) for WhatsApp links
 
 // --- Components ---
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 50);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   return (
-    <nav className="fixed w-full z-50 glass">
+    <nav className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'bg-white shadow-md py-2' : 'bg-transparent py-4'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-20 items-center">
-          <div className="flex-shrink-0 flex items-center gap-2">
-            <img src={LOGO_URL} alt="الأمين للبرجولات" className="h-16 w-auto" referrerPolicy="no-referrer" />
-            <span className="text-2xl font-extrabold text-brand-blue tracking-tight hidden sm:block">الأمين للبرجولات</span>
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <a href={`tel:${PHONE_NUMBER}`} className="hidden md:flex items-center gap-2 bg-brand-blue text-white px-6 py-2 rounded-full hover:bg-brand-orange transition-colors font-bold">
+              <Phone size={18} />
+              <span>اتصل بنا</span>
+            </a>
           </div>
-          
-          <div className="hidden md:block">
-            <div className="mr-10 flex items-baseline space-x-8 space-x-reverse">
-              <a href="#home" className="text-brand-blue hover:text-brand-orange px-3 py-2 font-semibold transition-colors">الرئيسية</a>
-              <a href="#services" className="text-brand-blue hover:text-brand-orange px-3 py-2 font-semibold transition-colors">خدماتنا</a>
-              <a href="#gallery" className="text-brand-blue hover:text-brand-orange px-3 py-2 font-semibold transition-colors">أعمالنا</a>
-              <a href="#about" className="text-brand-blue hover:text-brand-orange px-3 py-2 font-semibold transition-colors">من نحن</a>
-              <a href={`tel:${PHONE_NUMBER}`} className="bg-brand-blue text-white px-6 py-2 rounded-full font-bold hover:bg-brand-orange transition-all shadow-md">اتصل بنا</a>
+
+          <div className="hidden md:flex items-center gap-8">
+            <a href="#about" className={`font-bold hover:text-brand-orange transition-colors ${scrolled ? 'text-brand-blue' : 'text-white'}`}>من نحن</a>
+            <a href="#gallery" className={`font-bold hover:text-brand-orange transition-colors ${scrolled ? 'text-brand-blue' : 'text-white'}`}>أعمالنا</a>
+            <a href="#services" className={`font-bold hover:text-brand-orange transition-colors ${scrolled ? 'text-brand-blue' : 'text-white'}`}>خدماتنا</a>
+            <a href="#" className={`font-bold hover:text-brand-orange transition-colors ${scrolled ? 'text-brand-blue' : 'text-white'}`}>الرئيسية</a>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="text-right hidden sm:block">
+              <h1 className={`text-2xl font-extrabold tracking-tight serif ${scrolled ? 'text-brand-blue' : 'text-white'}`}>الأمين للبرجولات</h1>
+            </div>
+            <div className="bg-brand-orange p-2 rounded-lg">
+              <Hammer className="w-8 h-8 text-white" />
             </div>
           </div>
 
-          <div className="md:hidden">
-            <button onClick={() => setIsOpen(!isOpen)} className="text-brand-blue">
-              {isOpen ? <X size={28} /> : <Menu size={28} />}
-            </button>
-          </div>
+          <button className="md:hidden text-brand-blue bg-white p-2 rounded-lg" onClick={() => setIsOpen(!isOpen)}>
+            {isOpen ? <X /> : <Menu />}
+          </button>
         </div>
       </div>
 
+      {/* Mobile menu */}
       <AnimatePresence>
         {isOpen && (
           <motion.div 
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-white border-t border-gray-100 overflow-hidden"
+            className="md:hidden bg-white border-t border-gray-100"
           >
-            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 text-right">
-              <a href="#home" onClick={() => setIsOpen(false)} className="block px-3 py-4 text-lg font-medium text-brand-blue border-b border-gray-50">الرئيسية</a>
-              <a href="#services" onClick={() => setIsOpen(false)} className="block px-3 py-4 text-lg font-medium text-brand-blue border-b border-gray-50">خدماتنا</a>
-              <a href="#gallery" onClick={() => setIsOpen(false)} className="block px-3 py-4 text-lg font-medium text-brand-blue border-b border-gray-50">أعمالنا</a>
-              <a href="#about" onClick={() => setIsOpen(false)} className="block px-3 py-4 text-lg font-medium text-brand-blue border-b border-gray-50">من نحن</a>
-              <a href={`tel:${PHONE_NUMBER}`} onClick={() => setIsOpen(false)} className="block px-3 py-4 text-lg font-bold text-brand-orange">اتصل بنا</a>
+            <div className="px-4 pt-2 pb-4 space-y-1 text-right">
+              <a href="#" className="block px-3 py-2 text-brand-blue font-bold hover:bg-sand rounded-md">الرئيسية</a>
+              <a href="#services" className="block px-3 py-2 text-brand-blue font-bold hover:bg-sand rounded-md">خدماتنا</a>
+              <a href="#gallery" className="block px-3 py-2 text-brand-blue font-bold hover:bg-sand rounded-md">أعمالنا</a>
+              <a href="#about" className="block px-3 py-2 text-brand-blue font-bold hover:bg-sand rounded-md">من نحن</a>
             </div>
           </motion.div>
         )}
@@ -168,77 +134,75 @@ const Navbar = () => {
 
 const Hero = () => {
   return (
-    <section id="home" className="relative h-screen flex items-center overflow-hidden">
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
       <div className="absolute inset-0 z-0">
         <img 
-          src="input_file_0.jpg" 
-          alt="الأمين للبرجولات" 
+          src="./input_file_2.jpg" 
+          alt="برجولة خشبية فخمة" 
           className="w-full h-full object-cover"
           referrerPolicy="no-referrer"
         />
-        <div className="absolute inset-0 bg-brand-blue/40"></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-brand-blue/90 to-brand-blue/40 mix-blend-multiply"></div>
       </div>
-
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full pt-20 md:pt-0">
-        <motion.div 
-          initial={{ opacity: 0, x: 50 }}
-          whileInView={{ opacity: 1, x: 0 }}
+      
+      <div className="relative z-10 text-center px-4 max-w-5xl mx-auto mt-20">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="max-w-2xl text-white"
         >
-          <h1 className="text-5xl md:text-7xl font-extrabold mb-6 leading-tight">
-            الأمين للبرجولات <br />
-            <span className="text-brand-orange">دقة وأمانة</span> في كل قطعة
+          <span className="inline-block py-1 px-3 rounded-full bg-brand-orange/20 text-brand-orange border border-brand-orange/30 font-bold text-sm mb-6 backdrop-blur-sm">
+            الخيار الأول للبرجولات في مصر
+          </span>
+          <h1 className="text-5xl md:text-7xl font-extrabold text-white mb-6 leading-tight serif">
+            نصنع من الخشب <br/>
+            <span className="text-brand-orange">تحفاً فنية</span> لمنزلك
           </h1>
-          <p className="text-xl md:text-2xl mb-10 opacity-90 font-light leading-relaxed">
-            أهلاً بك! أنا الأمين، متخصص في تحويل مساحتك الخارجية لتحفة فنية خشبية. بشتغل بإيدي وبكل أمانة عشان أطلعلك شغل يعيش معاك العمر كله.
+          <p className="text-xl text-gray-200 mb-10 max-w-2xl mx-auto leading-relaxed">
+            متخصصون في تصميم وتنفيذ أرقى البرجولات الخشبية والأسقف الديكورية بأعلى معايير الجودة وأفضل أنواع الأخشاب.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <a href="#gallery" className="bg-brand-orange text-white px-10 py-4 rounded-full text-lg font-bold hover:bg-brand-light hover:text-brand-blue transition-all text-center shadow-lg flex items-center justify-center gap-2">
-              شوف شغلي <ArrowLeft size={20} />
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <a href="#gallery" className="bg-brand-orange text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-white hover:text-brand-orange transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
+              شاهد أعمالنا <ChevronLeft size={20} />
             </a>
-            <a href={`https://wa.me/${PHONE_NUMBER}`} target="_blank" rel="noopener noreferrer" className="bg-white/10 backdrop-blur-md border border-white/30 text-white px-10 py-4 rounded-full text-lg font-bold hover:bg-white hover:text-brand-blue transition-all text-center flex items-center justify-center gap-2">
-              كلمنا واتساب <MessageCircle size={20} />
+            <a href={`https://wa.me/${PHONE_NUMBER}`} target="_blank" rel="noopener noreferrer" className="bg-white/10 backdrop-blur-md text-white border border-white/30 px-8 py-4 rounded-full font-bold text-lg hover:bg-white hover:text-brand-blue transition-all flex items-center justify-center gap-2">
+              تواصل معنا عبر واتساب
             </a>
           </div>
         </motion.div>
       </div>
-      
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 animate-bounce text-white opacity-50">
-        <div className="w-6 h-10 border-2 border-white rounded-full flex justify-center pt-2">
-          <div className="w-1 h-2 bg-white rounded-full"></div>
-        </div>
-      </div>
-    </section>
+    </div>
   );
 };
 
 const Services = () => {
   return (
-    <section id="services" className="py-24 bg-white">
+    <section id="services" className="py-24 bg-white relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-20">
-          <h2 className="text-sm font-bold text-brand-orange uppercase tracking-widest mb-3">إيه اللي بنقدمه؟</h2>
-          <h3 className="text-4xl md:text-5xl font-extrabold text-brand-blue serif">خدماتنا المتكاملة</h3>
-          <div className="w-24 h-1 bg-brand-orange mx-auto mt-6"></div>
+        <div className="text-center mb-16">
+          <h2 className="text-sm font-bold text-brand-orange uppercase tracking-widest mb-3">ماذا نقدم</h2>
+          <h3 className="text-4xl md:text-5xl font-extrabold text-brand-blue serif">خدماتنا المتميزة</h3>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {SERVICES.map((service, index) => (
-            <motion.div
-              key={service.id}
-              initial={{ opacity: 0, y: 30 }}
+            <motion.div 
+              key={index}
+              initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="group bg-sand p-8 rounded-3xl hover:bg-brand-blue hover:text-white transition-all duration-500 shadow-sm hover:shadow-2xl"
+              transition={{ delay: index * 0.2 }}
+              className="bg-sand rounded-3xl p-8 hover:shadow-xl transition-all duration-300 group border border-gray-100"
             >
-              <div className="bg-white w-16 h-16 rounded-2xl flex items-center justify-center text-brand-orange mb-6 group-hover:bg-brand-orange group-hover:text-white transition-colors shadow-sm">
+              <div className="bg-white w-16 h-16 rounded-2xl flex items-center justify-center text-brand-orange mb-6 shadow-sm group-hover:scale-110 transition-transform">
                 {service.icon}
               </div>
-              <h4 className="text-2xl font-bold mb-4">{service.title}</h4>
-              <p className="opacity-70 leading-relaxed">
+              <h4 className="text-2xl font-bold text-brand-blue mb-4 text-right">{service.title}</h4>
+              <p className="text-gray-600 text-right leading-relaxed mb-6">
                 {service.description}
               </p>
+              <div className="rounded-2xl overflow-hidden h-48">
+                <img src={service.image} alt={service.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" referrerPolicy="no-referrer" />
+              </div>
             </motion.div>
           ))}
         </div>
@@ -249,6 +213,7 @@ const Services = () => {
 
 const Gallery = () => {
   const [firestoreProjects, setFirestoreProjects] = useState<any[]>([]);
+  const [deletedStaticIds, setDeletedStaticIds] = useState<number[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -267,17 +232,25 @@ const Gallery = () => {
       console.error("Error fetching gallery:", error);
     });
 
+    const qDeleted = query(collection(db, 'deleted_static_images'));
+    const unsubscribeDeleted = onSnapshot(qDeleted, (snapshot) => {
+      setDeletedStaticIds(snapshot.docs.map(doc => Number(doc.id)));
+    });
+
     return () => {
       unsubscribeAuth();
       unsubscribeDb();
+      unsubscribeDeleted();
     };
   }, []);
 
-  const handleDelete = async (id: string) => {
-    // We use a custom modal or just window.confirm for now, though iframe blocks it sometimes.
-    // Let's just delete it directly or use a custom state, but since it's admin only, we can just delete it.
+  const handleDelete = async (id: string | number, isFirestore: boolean) => {
     try {
-      await deleteDoc(doc(db, 'gallery', id));
+      if (isFirestore) {
+        await deleteDoc(doc(db, 'gallery', id as string));
+      } else {
+        await setDoc(doc(db, 'deleted_static_images', id.toString()), { deleted: true });
+      }
     } catch (error) {
       console.error("Delete failed", error);
     }
@@ -285,7 +258,7 @@ const Gallery = () => {
 
   const allProjects = [
     ...firestoreProjects.map(p => ({ id: p.id, title: p.title, category: p.category, image: p.image, isFirestore: true })),
-    ...PROJECTS.map(p => ({ ...p, isFirestore: false }))
+    ...PROJECTS.filter(p => !deletedStaticIds.includes(p.id)).map(p => ({ ...p, isFirestore: false }))
   ];
 
   return (
@@ -320,9 +293,9 @@ const Gallery = () => {
                 <span className="text-sm font-medium text-brand-light mb-2">{project.category}</span>
                 <h4 className="text-2xl font-bold">{project.title}</h4>
               </div>
-              {isAdmin && project.isFirestore && (
+              {isAdmin && (
                 <button 
-                  onClick={() => handleDelete(project.id as string)}
+                  onClick={() => handleDelete(project.id, project.isFirestore || false)}
                   className="absolute top-4 left-4 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 z-10"
                   title="حذف الصورة"
                 >
@@ -349,56 +322,41 @@ const About = () => {
           >
             <div className="relative z-10 rounded-3xl overflow-hidden shadow-2xl">
               <img 
-                src="input_file_13.jpg" 
-                alt="الأمين في العمل" 
-                className="w-full"
+                src="./input_file_4.jpg" 
+                alt="ورشة الأمين للبرجولات" 
+                className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
               />
             </div>
-            <div className="absolute -bottom-10 -right-10 w-64 h-64 bg-brand-light rounded-full -z-0 opacity-20 blur-3xl"></div>
-            <div className="absolute -top-10 -left-10 w-48 h-48 bg-brand-orange rounded-full -z-0 opacity-10 blur-2xl"></div>
-            
-            <div className="absolute top-4 right-4 md:top-10 md:right-10 glass p-4 md:p-6 rounded-2xl shadow-xl z-20">
-              <div className="flex items-center gap-3 md:gap-4">
-                <div className="bg-brand-blue text-white p-2 md:p-3 rounded-xl">
-                  <Star fill="currentColor" className="w-5 h-5 md:w-6 md:h-6" />
-                </div>
-                <div>
-                  <p className="text-xl md:text-2xl font-bold text-brand-blue">خبرة</p>
-                  <p className="text-xs md:text-sm text-gray-600">طويلة في السوق</p>
-                </div>
-              </div>
+            <div className="absolute -bottom-8 -right-8 bg-brand-orange text-white p-8 rounded-3xl shadow-xl z-20 hidden md:block">
+              <div className="text-5xl font-extrabold mb-2">+15</div>
+              <div className="font-bold text-lg">عاماً من الخبرة</div>
             </div>
           </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, x: -50 }}
-            whileInView={{ opacity: 1, x: 0 }}
-          >
-            <h2 className="text-sm font-bold text-brand-orange uppercase tracking-widest mb-3">إحنا مين؟</h2>
-            <h3 className="text-4xl md:text-5xl font-extrabold text-brand-blue mb-8 serif">الأمانة هي سر نجاحنا</h3>
-            <p className="text-lg text-gray-600 mb-8 leading-relaxed">
-              في "الأمين للبرجولات"، مش بس بنركب خشب، إحنا بنبني ثقة. بنهتم بكل مسمار وكل تفصيلة عشان نضمن إنك تستلم شغل يشرفك قدام ضيوفك ويعيش معاك سنين طويلة.
+          <div className="text-right">
+            <h2 className="text-sm font-bold text-brand-orange uppercase tracking-widest mb-3">قصتنا</h2>
+            <h3 className="text-4xl font-extrabold text-brand-blue mb-6 serif">خبرة تتوارثها الأجيال في صناعة الخشب</h3>
+            <p className="text-gray-600 text-lg leading-relaxed mb-6">
+              مؤسسة "الأمين للبرجولات" ليست مجرد ورشة نجارة، بل هي كيان متخصص يجمع بين الفن والهندسة. نحن نؤمن بأن الخشب مادة حية تحتاج إلى أيدٍ خبيرة لتشكيلها وتحويلها إلى تحف فنية تزين منازلكم.
+            </p>
+            <p className="text-gray-600 text-lg leading-relaxed mb-8">
+              نستخدم أفضل أنواع الأخشاب المستوردة (البيتش باين، العزيزي، السويدي) المعالجة ضد الشمس والرطوبة، لضمان عمر افتراضي طويل لبرجولتك.
             </p>
             
-            <ul className="space-y-4 mb-10">
-              {[
-                "أخشاب طبيعية درجة أولى معالجة",
-                "دقة في المواعيد وتسليم في الوقت",
-                "أسعار تنافسية مقابل أعلى جودة",
-                "ضمان حقيقي ومتابعة بعد التركيب"
-              ].map((item, i) => (
-                <li key={i} className="flex items-center gap-3 text-brand-blue font-semibold">
-                  <CheckCircle2 className="text-brand-orange" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-
-            <a href={`tel:${PHONE_NUMBER}`} className="inline-block bg-brand-blue text-white px-10 py-4 rounded-full font-bold hover:bg-brand-orange transition-all shadow-lg">
-              كلمنا دلوقتي
-            </a>
-          </motion.div>
+            <div className="grid grid-cols-2 gap-6">
+              <div className="bg-sand p-4 rounded-2xl border border-gray-100">
+                <Star className="text-brand-orange mb-2" />
+                <h4 className="font-bold text-brand-blue">جودة مضمونة</h4>
+                <p className="text-sm text-gray-500">ضمان على جميع أعمالنا</p>
+              </div>
+              <div className="bg-sand p-4 rounded-2xl border border-gray-100">
+                <Hammer className="text-brand-orange mb-2" />
+                <h4 className="font-bold text-brand-blue">تنفيذ دقيق</h4>
+                <p className="text-sm text-gray-500">التزام بالمواعيد والمواصفات</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -406,128 +364,43 @@ const About = () => {
 };
 
 const Contact = () => {
-  const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    service: 'برجولة حديقة',
-    message: ''
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const text = `طلب جديد من الموقع:
-الاسم: ${formData.name}
-الرقم: ${formData.phone}
-الخدمة: ${formData.service}
-الرسالة: ${formData.message}`;
-    
-    const encodedText = encodeURIComponent(text);
-    window.open(`https://wa.me/${PHONE_NUMBER}?text=${encodedText}`, '_blank');
-  };
-
   return (
-    <section id="contact" className="py-24 bg-brand-blue text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-20">
-          <div>
-            <h2 className="text-brand-orange font-bold uppercase tracking-widest mb-4">تواصل معانا</h2>
-            <h3 className="text-4xl md:text-5xl font-extrabold mb-8 serif">مستنيين مكالمتك</h3>
-            <p className="text-lg opacity-70 mb-12 leading-relaxed">
-              لو عندك أي سؤال أو عاوز تعرف تكلفة مشروعك، متترددش تكلمنا. إحنا هنا عشان نساعدك تختار الأنسب ليك.
-            </p>
+    <section id="contact" className="py-24 bg-brand-blue text-white relative overflow-hidden">
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-brand-orange rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-brand-light rounded-full blur-3xl transform -translate-x-1/2 translate-y-1/2"></div>
+      </div>
 
-            <div className="space-y-8">
-              <div className="flex items-start gap-6">
-                <div className="bg-white/10 p-4 rounded-2xl">
-                  <Phone className="text-brand-orange" />
-                </div>
-                <div>
-                  <p className="text-sm opacity-50 mb-1">اتصل بينا</p>
-                  <p className="text-xl font-bold">{PHONE_NUMBER}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-6">
-                <div className="bg-white/10 p-4 rounded-2xl">
-                  <MessageCircle className="text-brand-orange" />
-                </div>
-                <div>
-                  <p className="text-sm opacity-50 mb-1">واتساب</p>
-                  <p className="text-xl font-bold">{PHONE_NUMBER}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-6">
-                <div className="bg-white/10 p-4 rounded-2xl">
-                  <MapPin className="text-brand-orange" />
-                </div>
-                <div>
-                  <p className="text-sm opacity-50 mb-1">الموقع</p>
-                  <p className="text-xl font-bold">القاهرة - متاحين في كل المحافظات</p>
-                </div>
-              </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="text-center mb-16">
+          <h2 className="text-sm font-bold text-brand-orange uppercase tracking-widest mb-3">تواصل معنا</h2>
+          <h3 className="text-4xl md:text-5xl font-extrabold serif">نحن هنا لخدمتك</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+          <a href={`https://wa.me/${PHONE_NUMBER}`} target="_blank" rel="noopener noreferrer" className="bg-white/10 backdrop-blur-md border border-white/20 p-8 rounded-3xl text-center hover:bg-white/20 transition-all group">
+            <div className="bg-brand-orange w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+              <Phone className="text-white" size={24} />
             </div>
+            <h4 className="text-xl font-bold mb-2">اتصل بنا</h4>
+            <p className="text-gray-300 dir-ltr">{PHONE_NUMBER}</p>
+          </a>
+
+          <div className="bg-white/10 backdrop-blur-md border border-white/20 p-8 rounded-3xl text-center hover:bg-white/20 transition-all group">
+            <div className="bg-brand-orange w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+              <MapPin className="text-white" size={24} />
+            </div>
+            <h4 className="text-xl font-bold mb-2">مقرنا</h4>
+            <p className="text-gray-300">القاهرة، جمهورية مصر العربية</p>
           </div>
 
-          <motion.div 
-            initial={{ opacity: 0, y: 50 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-3xl p-8 md:p-12 text-brand-blue shadow-2xl"
-          >
-            <form className="space-y-6" onSubmit={handleSubmit}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-bold mb-2">اسمك</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    className="w-full bg-sand border-none rounded-xl p-4 focus:ring-2 focus:ring-brand-orange outline-none" 
-                    placeholder="اكتب اسمك هنا" 
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2">رقم تليفونك</label>
-                  <input 
-                    type="tel" 
-                    required
-                    value={formData.phone}
-                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    className="w-full bg-sand border-none rounded-xl p-4 focus:ring-2 focus:ring-brand-orange outline-none" 
-                    placeholder="01xxxxxxxxx" 
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-bold mb-2">عاوز تعمل إيه؟</label>
-                <select 
-                  value={formData.service}
-                  onChange={(e) => setFormData({...formData, service: e.target.value})}
-                  className="w-full bg-sand border-none rounded-xl p-4 focus:ring-2 focus:ring-brand-orange outline-none"
-                >
-                  <option>برجولة حديقة</option>
-                  <option>برجولة روف</option>
-                  <option>سقف ديكوري</option>
-                  <option>أخرى</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-bold mb-2">رسالتك</label>
-                <textarea 
-                  rows={4} 
-                  value={formData.message}
-                  onChange={(e) => setFormData({...formData, message: e.target.value})}
-                  className="w-full bg-sand border-none rounded-xl p-4 focus:ring-2 focus:ring-brand-orange outline-none" 
-                  placeholder="اكتب اللي في بالك..."
-                ></textarea>
-              </div>
-              <button 
-                type="submit"
-                className="w-full bg-brand-blue text-white py-5 rounded-xl font-bold text-lg hover:bg-brand-orange transition-all shadow-lg"
-              >
-                ارسل الطلب
-              </button>
-            </form>
-          </motion.div>
+          <div className="bg-white/10 backdrop-blur-md border border-white/20 p-8 rounded-3xl text-center hover:bg-white/20 transition-all group">
+            <div className="bg-brand-orange w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+              <Mail className="text-white" size={24} />
+            </div>
+            <h4 className="text-xl font-bold mb-2">البريد الإلكتروني</h4>
+            <p className="text-gray-300">info@alamin-pergolas.com</p>
+          </div>
         </div>
       </div>
     </section>
@@ -536,25 +409,18 @@ const Contact = () => {
 
 const Footer = () => {
   return (
-    <footer className="bg-brand-blue text-white py-12 border-t border-white/10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="flex items-center gap-4">
-            <div className="bg-white p-2 rounded-xl shadow-inner">
-              <img src={LOGO_URL} alt="الأمين للبرجولات" className="h-12 w-auto" referrerPolicy="no-referrer" />
-            </div>
-            <span className="text-xl font-bold">الأمين للبرجولات</span>
-          </div>
-          
-          <div className="flex gap-6">
-            <a href={`https://wa.me/${PHONE_NUMBER}`} target="_blank" rel="noopener noreferrer" className="bg-white/5 p-3 rounded-full hover:bg-brand-orange transition-colors"><MessageCircle size={20} /></a>
-            <a href="https://www.facebook.com/Aminforpergola/" target="_blank" rel="noopener noreferrer" className="bg-white/5 p-3 rounded-full hover:bg-brand-orange transition-colors"><Facebook size={20} /></a>
-            <a href="https://www.instagram.com/elamincompany" target="_blank" rel="noopener noreferrer" className="bg-white/5 p-3 rounded-full hover:bg-brand-orange transition-colors"><Instagram size={20} /></a>
-          </div>
-
-          <p className="text-sm opacity-50">
-            © {new Date().getFullYear()} الأمين للبرجولات. جميع الحقوق محفوظة.
-          </p>
+    <footer className="bg-gray-900 text-gray-400 py-12 border-t border-gray-800">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="flex items-center gap-2">
+          <Hammer className="text-brand-orange" />
+          <span className="text-white font-bold text-xl serif">الأمين للبرجولات</span>
+        </div>
+        <p className="text-sm">
+          جميع الحقوق محفوظة © {new Date().getFullYear()} شركة الأمين للبرجولات
+        </p>
+        <div className="flex gap-4">
+          <a href="#" className="hover:text-brand-orange transition-colors">فيسبوك</a>
+          <a href="#" className="hover:text-brand-orange transition-colors">إنستجرام</a>
         </div>
       </div>
     </footer>
@@ -598,23 +464,23 @@ const AIChatbot = () => {
         الشركة متخصصة في تصنيع وتركيب البرجولات الخشبية، برجولات الحدائق، برجولات الروف، والأسقف الديكورية.
         صاحب الشركة هو "الأمين".
         رقم التواصل: ${PHONE_NUMBER}.
-        الشركة تتميز بالجودة العالية، التصاميم المبتكرة، والالتزام بالمواعيد.
-        أجب على أسئلة العملاء بلهجة ودودة واحترافية باللغة العربية.
-        إذا سأل العميل عن الأسعار، أخبره أن الأسعار تعتمد على المساحة ونوع الخشب والتصميم، ويفضل التواصل عبر الواتساب أو الهاتف للمعاينة وتحديد السعر بدقة.
+        مقر الشركة: القاهرة، مصر.
+        أجب باختصار وبطريقة ودية واحترافية باللغة العربية.
+        إذا سأل العميل عن الأسعار، أخبره أن الأسعار تختلف حسب المساحة ونوع الخشب، واطلب منه التواصل عبر واتساب للحصول على عرض سعر دقيق.
       `;
 
-      const result = await genAI.models.generateContent({
+      const response = await genAI.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [
-          { role: 'user', parts: [{ text: systemInstruction + "\n\nسؤال العميل: " + userMessage }] }
-        ]
+        contents: userMessage,
+        config: {
+          systemInstruction: systemInstruction,
+        }
       });
 
-      const botResponse = result.text || "عذراً، حدث خطأ ما. يرجى المحاولة لاحقاً.";
-      setMessages(prev => [...prev, { role: 'bot', text: botResponse }]);
+      setMessages(prev => [...prev, { role: 'bot', text: response.text || 'عذراً، حدث خطأ. يرجى المحاولة مرة أخرى.' }]);
     } catch (error) {
-      console.error("Gemini Error:", error);
-      setMessages(prev => [...prev, { role: 'bot', text: "عذراً، أنا غير قادر على الرد حالياً. يمكنك التواصل معنا مباشرة عبر الواتساب." }]);
+      console.error("Chat error:", error);
+      setMessages(prev => [...prev, { role: 'bot', text: 'عذراً، لا يمكنني الاتصال بالخادم حالياً. يرجى التواصل معنا عبر واتساب.' }]);
     } finally {
       setIsLoading(false);
     }
@@ -628,23 +494,25 @@ const AIChatbot = () => {
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="bg-white rounded-2xl shadow-2xl w-80 sm:w-96 overflow-hidden border border-gray-100 mb-4"
+            className="absolute bottom-16 left-0 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100 flex flex-col h-[450px]"
           >
-            <div className="bg-brand-blue p-4 text-white flex justify-between items-center">
+            <div className="bg-brand-blue p-4 flex justify-between items-center text-white">
               <div className="flex items-center gap-2">
-                <Bot size={24} />
+                <MessageCircle size={20} />
                 <span className="font-bold">مساعد الأمين الذكي</span>
               </div>
-              <button onClick={() => setIsOpen(false)}><X size={20} /></button>
+              <button onClick={() => setIsOpen(false)} className="hover:text-brand-orange transition-colors">
+                <X size={20} />
+              </button>
             </div>
-
-            <div className="h-96 overflow-y-auto p-4 space-y-4 bg-sand/30">
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 flex flex-col">
               {messages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                  <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${
+                  <div className={`max-w-[80%] p-3 rounded-2xl text-sm leading-relaxed ${
                     msg.role === 'user' 
-                      ? 'bg-brand-orange text-white rounded-tr-none' 
-                      : 'bg-white text-brand-blue shadow-sm rounded-tl-none'
+                      ? 'bg-brand-orange text-white rounded-tl-none' 
+                      : 'bg-white text-gray-800 border border-gray-100 shadow-sm rounded-tr-none'
                   }`}>
                     {msg.text}
                   </div>
@@ -652,43 +520,42 @@ const AIChatbot = () => {
               ))}
               {isLoading && (
                 <div className="flex justify-end">
-                  <div className="bg-white p-3 rounded-2xl shadow-sm rounded-tl-none">
-                    <div className="flex gap-1">
-                      <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                      <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce [animation-delay:0.4s]"></div>
-                    </div>
+                  <div className="bg-white border border-gray-100 shadow-sm p-3 rounded-2xl rounded-tr-none flex gap-1">
+                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="p-4 border-t border-gray-100 flex gap-2">
-              <input
-                type="text"
+            <div className="p-3 bg-white border-t border-gray-100 flex gap-2">
+              <button 
+                onClick={handleSend}
+                disabled={isLoading || !input.trim()}
+                className="bg-brand-blue text-white p-2 rounded-xl hover:bg-brand-orange transition-colors disabled:opacity-50"
+              >
+                <Send size={20} className="transform rotate-180" />
+              </button>
+              <input 
+                type="text" 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSend()}
                 placeholder="اسألني أي شيء..."
-                className="flex-1 bg-sand border-none rounded-xl px-4 py-2 text-sm outline-none focus:ring-1 focus:ring-brand-orange"
+                className="flex-1 bg-gray-100 rounded-xl px-4 py-2 text-right focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                dir="rtl"
               />
-              <button 
-                onClick={handleSend}
-                disabled={isLoading}
-                className="bg-brand-blue text-white p-2 rounded-xl hover:bg-brand-orange transition-colors disabled:opacity-50"
-              >
-                <Send size={20} />
-              </button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <button
+      <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="bg-brand-blue text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center justify-center"
+        className={`bg-brand-blue text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center justify-center ${isOpen ? 'rotate-90' : ''}`}
       >
-        {isOpen ? <X size={32} /> : <Bot size={32} />}
+        {isOpen ? <X size={32} /> : <MessageCircle size={32} />}
       </button>
     </div>
   );
@@ -721,6 +588,7 @@ const AdminPanel = () => {
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      setIsOpen(false);
     } catch (error) {
       console.error("Logout failed", error);
     }
@@ -729,6 +597,11 @@ const AdminPanel = () => {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 1048576) {
+        alert('حجم الصورة كبير جداً. أقصى حجم هو 1 ميجابايت.');
+        e.target.value = '';
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         const img = new Image();
@@ -786,7 +659,7 @@ const AdminPanel = () => {
 
   if (!user) {
     return (
-      <div className="fixed bottom-8 right-8 z-40">
+      <div className="fixed bottom-28 right-8 z-40">
         <button onClick={handleLogin} className="bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition-colors" title="تسجيل دخول الإدارة">
           <LogIn size={20} />
         </button>
@@ -795,7 +668,7 @@ const AdminPanel = () => {
   }
 
   return (
-    <div className="fixed bottom-8 right-8 z-40 flex flex-col items-end gap-4">
+    <div className="fixed bottom-28 right-8 z-40 flex flex-col items-end gap-4">
       <div className="flex gap-2">
         <button onClick={() => setIsOpen(!isOpen)} className="bg-brand-blue text-white px-4 py-2 rounded-full shadow-lg hover:bg-brand-orange transition-colors flex items-center gap-2">
           <ImagePlus size={20} /> إضافة صورة
