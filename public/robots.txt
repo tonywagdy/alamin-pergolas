@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tonywagdy.github.io/alamin-pergolas/sitemap.xml
