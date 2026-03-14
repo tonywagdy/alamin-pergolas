@@ -1,25 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
   <url>
     <loc>https://tonywagdy.github.io/alamin-pergolas/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
+
   <url>
     <loc>https://tonywagdy.github.io/alamin-pergolas/#services</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
+
   <url>
     <loc>https://tonywagdy.github.io/alamin-pergolas/#gallery</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
+
   <url>
     <loc>https://tonywagdy.github.io/alamin-pergolas/#about</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
+
   <url>
     <loc>https://tonywagdy.github.io/alamin-pergolas/#contact</loc>
     <changefreq>weekly</changefreq>
