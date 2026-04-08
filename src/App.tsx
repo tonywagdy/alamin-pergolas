@@ -880,10 +880,6 @@ const AdminPanel = () => {
 };
 
 export default function App() {
-  useEffect(() => {
-    document.title = 'الأمين للبرجولات | تصميم وتنفيذ برجولات خشبية وحديد في مصر';
-  }, []);
-
   return (
     <div className="min-h-screen">
       <Navbar />
