@@ -31,7 +31,7 @@ import {
   AlertCircle,
   X
 } from 'lucide-react';
-import { compressImage, CompressionResult } from '../utils/imageCompressor';
+import { compressImage, compressDataUrl, CompressionResult } from '../utils/imageCompressor';
 import { db, auth, storage } from '../firebase';
 import { 
   collection, 
@@ -107,6 +107,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   const [baTitle, setBaTitle] = useState(BEFORE_AFTER_ITEMS[0].title);
   const [baBeforeImage, setBaBeforeImage] = useState(BEFORE_AFTER_ITEMS[0].beforeImage);
   const [baAfterImage, setBaAfterImage] = useState(BEFORE_AFTER_ITEMS[0].afterImage);
+  const [baBeforeBlob, setBaBeforeBlob] = useState<Blob | null>(null);
+  const [baAfterBlob, setBaAfterBlob] = useState<Blob | null>(null);
+  const [baDirty, setBaDirty] = useState(false);
+  const baDirtyRef = useRef(false);
+  baDirtyRef.current = baDirty;
+
   const [isSavingBA, setIsSavingBA] = useState(false);
   const [isCompressingBA, setIsCompressingBA] = useState<'before' | 'after' | null>(null);
   const [baSuccessMsg, setBaSuccessMsg] = useState('');
@@ -202,17 +208,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       setDeletedStaticIds(snapshot.docs.map(docSnap => Number(docSnap.id)));
     }, (err) => console.warn("Deleted images error:", err));
 
-    // 4. Before & After listener
-    const unsubBA = onSnapshot(doc(db, 'before_after', 'main'), (snapshot) => {
+    // 4. Before & After listeners (main, before, after)
+    const unsubBAMain = onSnapshot(doc(db, 'before_after', 'main'), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        if (data.beforeImage) setBaBeforeImage(data.beforeImage);
-        if (data.afterImage) setBaAfterImage(data.afterImage);
-        if (data.title) setBaTitle(data.title);
+        if (!baDirtyRef.current) {
+          if (data.title) setBaTitle(data.title);
+          if (data.beforeImage) setBaBeforeImage(data.beforeImage);
+          if (data.afterImage) setBaAfterImage(data.afterImage);
+        }
       } else {
         try {
           const cached = localStorage.getItem('alamin_before_after');
-          if (cached) {
+          if (cached && !baDirtyRef.current) {
             const parsed = JSON.parse(cached);
             if (parsed.beforeImage) setBaBeforeImage(parsed.beforeImage);
             if (parsed.afterImage) setBaAfterImage(parsed.afterImage);
@@ -220,13 +228,33 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
           }
         } catch (e) {}
       }
-    }, (err) => console.warn("BA fetch error:", err));
+    }, (err) => console.warn("BA main fetch error:", err));
+
+    const unsubBABefore = onSnapshot(doc(db, 'before_after', 'before'), (snapshot) => {
+      if (snapshot.exists() && !baDirtyRef.current) {
+        const data = snapshot.data();
+        if (data && data.image) {
+          setBaBeforeImage(data.image);
+        }
+      }
+    }, (err) => console.warn("BA before fetch error:", err));
+
+    const unsubBAAfter = onSnapshot(doc(db, 'before_after', 'after'), (snapshot) => {
+      if (snapshot.exists() && !baDirtyRef.current) {
+        const data = snapshot.data();
+        if (data && data.image) {
+          setBaAfterImage(data.image);
+        }
+      }
+    }, (err) => console.warn("BA after fetch error:", err));
 
     return () => {
       unsubLeads();
       unsubGallery();
       unsubDeleted();
-      unsubBA();
+      unsubBAMain();
+      unsubBABefore();
+      unsubBAAfter();
     };
   }, [user]);
 
@@ -410,18 +438,35 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     setIsCompressingBA(side);
     setBaSuccessMsg('');
     try {
-      const res: CompressionResult = await compressImage(file, 1280, 0.82);
+      // High-efficiency web compression: 1080px max, 0.78 quality, max 300,000 characters (~220 KB)
+      const res: CompressionResult = await compressImage(file, 1080, 0.78, 300000);
       if (side === 'before') {
         setBaBeforeImage(res.dataUrl);
+        setBaBeforeBlob(res.blob);
       } else {
         setBaAfterImage(res.dataUrl);
+        setBaAfterBlob(res.blob);
       }
+      setBaDirty(true);
     } catch (err) {
+      console.warn("Client compression notice, attempting fallback:", err);
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         if (typeof reader.result === 'string') {
-          if (side === 'before') setBaBeforeImage(reader.result);
-          else setBaAfterImage(reader.result);
+          try {
+            const compressed = await compressDataUrl(reader.result, 1080, 0.78, 300000);
+            if (side === 'before') {
+              setBaBeforeImage(compressed.dataUrl);
+              setBaBeforeBlob(compressed.blob);
+            } else {
+              setBaAfterImage(compressed.dataUrl);
+              setBaAfterBlob(compressed.blob);
+            }
+          } catch {
+            if (side === 'before') setBaBeforeImage(reader.result as string);
+            else setBaAfterImage(reader.result as string);
+          }
+          setBaDirty(true);
         }
       };
       reader.readAsDataURL(file);
@@ -440,31 +485,86 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     setIsSavingBA(true);
     setBaSuccessMsg('');
 
-    const payload = {
-      beforeImage: baBeforeImage,
-      afterImage: baAfterImage,
-      title: baTitle.trim() || BEFORE_AFTER_ITEMS[0].title,
-      updatedAt: serverTimestamp()
-    };
-
     try {
-      localStorage.setItem('alamin_before_after', JSON.stringify({
-        beforeImage: baBeforeImage,
-        afterImage: baAfterImage,
-        title: baTitle.trim() || BEFORE_AFTER_ITEMS[0].title
-      }));
-    } catch (err) {
-      console.warn("LocalStorage save notice:", err);
-    }
+      // 1. Strict compression check: ensure both images are lightweight (<= 300,000 characters)
+      const beforeCompressed = await compressDataUrl(baBeforeImage, 1080, 0.78, 300000);
+      const afterCompressed = await compressDataUrl(baAfterImage, 1080, 0.78, 300000);
 
-    try {
-      await setDoc(doc(db, 'before_after', 'main'), payload, { merge: true });
-      setBaSuccessMsg("تم حفظ صور قبل وبعد بنجاح وتم تحديثها في الموقع فوراً!");
-      showToast("تم حفظ ونشر صور قبل وبعد في الموقع بنجاح!", "success");
-    } catch (err: any) {
-      console.warn("Firestore before/after save notice:", err);
-      setBaSuccessMsg("تم حفظ التعديلات وتحديث الموقع بنجاح!");
-      showToast("تم حفظ صور قبل وبعد بنجاح!", "success");
+      let finalBefore = beforeCompressed.dataUrl;
+      let finalAfter = afterCompressed.dataUrl;
+      const beforeBlob = baBeforeBlob || beforeCompressed.blob;
+      const afterBlob = baAfterBlob || afterCompressed.blob;
+
+      // 2. Upload to Firebase Storage if available (provides instant CDN URL)
+      if (storage) {
+        try {
+          const uploadTasks: Promise<void>[] = [];
+          if (beforeBlob && beforeBlob.size > 0 && finalBefore.startsWith('data:')) {
+            uploadTasks.push((async () => {
+              const storageRef = ref(storage, `before_after/before_${Date.now()}.webp`);
+              const res = await uploadBytes(storageRef, beforeBlob);
+              finalBefore = await getDownloadURL(res.ref);
+            })());
+          }
+          if (afterBlob && afterBlob.size > 0 && finalAfter.startsWith('data:')) {
+            uploadTasks.push((async () => {
+              const storageRef = ref(storage, `before_after/after_${Date.now()}.webp`);
+              const res = await uploadBytes(storageRef, afterBlob);
+              finalAfter = await getDownloadURL(res.ref);
+            })());
+          }
+
+          if (uploadTasks.length > 0) {
+            await Promise.race([
+              Promise.all(uploadTasks),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Storage upload timeout')), 3500))
+            ]);
+          }
+        } catch (storageErr) {
+          console.warn("Storage upload notice (falling back directly to Firestore):", storageErr);
+        }
+      }
+
+      const cleanTitle = baTitle.trim() || BEFORE_AFTER_ITEMS[0].title;
+
+      // 3. Save to Firestore (both main and dedicated sub-documents to guarantee 100% cloud sync across all devices)
+      const saveMainPromise = setDoc(doc(db, 'before_after', 'main'), {
+        beforeImage: finalBefore,
+        afterImage: finalAfter,
+        title: cleanTitle,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      const saveBeforePromise = setDoc(doc(db, 'before_after', 'before'), {
+        image: finalBefore,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      const saveAfterPromise = setDoc(doc(db, 'before_after', 'after'), {
+        image: finalAfter,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      await Promise.all([saveMainPromise, saveBeforePromise, saveAfterPromise]);
+
+      // 4. Update local states & cache now that cloud Firestore is safely committed
+      setBaBeforeImage(finalBefore);
+      setBaAfterImage(finalAfter);
+      setBaDirty(false);
+
+      try {
+        localStorage.setItem('alamin_before_after', JSON.stringify({
+          beforeImage: finalBefore,
+          afterImage: finalAfter,
+          title: cleanTitle
+        }));
+      } catch (e) {}
+
+      setBaSuccessMsg("تم حفظ صور قبل وبعد بنجاح وتم نشرها على كافة الأجهزة والموقع فوراً!");
+      showToast("تم حفظ صور قبل وبعد وتحديث الموقع بنجاح!", "success");
+    } catch (error: any) {
+      console.error("Firestore before/after save error:", error);
+      showToast(`تعذر حفظ الصور في السيرفر: ${error?.message || 'يرجى مراجعة اتصال الإنترنت'}`, "error");
     } finally {
       setIsSavingBA(false);
     }
@@ -482,15 +582,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     setBaBeforeImage(defaultData.beforeImage);
     setBaAfterImage(defaultData.afterImage);
     setBaTitle(defaultData.title);
+    setBaDirty(false);
 
     try {
       localStorage.setItem('alamin_before_after', JSON.stringify(defaultData));
-      await setDoc(doc(db, 'before_after', 'main'), {
-        ...defaultData,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-      showToast("تمت استعادة الصور الأصلية بنجاح!", "success");
-    } catch (e) {
+      await Promise.all([
+        setDoc(doc(db, 'before_after', 'main'), {
+          ...defaultData,
+          updatedAt: serverTimestamp()
+        }, { merge: true }),
+        setDoc(doc(db, 'before_after', 'before'), {
+          image: defaultData.beforeImage,
+          updatedAt: serverTimestamp()
+        }, { merge: true }),
+        setDoc(doc(db, 'before_after', 'after'), {
+          image: defaultData.afterImage,
+          updatedAt: serverTimestamp()
+        }, { merge: true })
+      ]);
+      showToast("تمت استعادة الصور الأصلية بنجاح ونشرها!", "success");
+    } catch (e: any) {
       console.warn("Reset notice:", e);
       showToast("تمت استعادة الصور الأصلية محلياً", "success");
     } finally {
@@ -1216,7 +1327,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                   <input
                     type="text"
                     value={baTitle}
-                    onChange={(e) => setBaTitle(e.target.value)}
+                    onChange={(e) => {
+                      setBaTitle(e.target.value);
+                      setBaDirty(true);
+                    }}
                     placeholder="مثال: تحويل روف خرساني إلى واحة استجمام فندقية"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:border-amber-500 outline-none"
                   />

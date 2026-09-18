@@ -28,32 +28,68 @@ export const BeforeAfter: React.FC = () => {
     return BEFORE_AFTER_ITEMS[0];
   });
 
-  // Listen to live updates from Firestore
+  // Listen to live updates from Firestore across all devices
   useEffect(() => {
     try {
-      const unsub = onSnapshot(doc(db, 'before_after', 'main'), (snapshot) => {
+      const unsubMain = onSnapshot(doc(db, 'before_after', 'main'), (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.data();
-          if (data && data.beforeImage && data.afterImage) {
-            const updated = {
-              id: 1,
-              title: data.title || BEFORE_AFTER_ITEMS[0].title,
-              description: data.description || BEFORE_AFTER_ITEMS[0].description,
-              beforeImage: data.beforeImage,
-              afterImage: data.afterImage,
-              location: data.location || BEFORE_AFTER_ITEMS[0].location
-            };
-            setCurrentItem(updated);
-            try {
-              localStorage.setItem('alamin_before_after', JSON.stringify(updated));
-            } catch (err) {}
+          if (data) {
+            setCurrentItem(prev => {
+              const updated = {
+                ...prev,
+                title: data.title || prev.title,
+                description: data.description || prev.description,
+                location: data.location || prev.location,
+                beforeImage: data.beforeImage || prev.beforeImage,
+                afterImage: data.afterImage || prev.afterImage
+              };
+              try {
+                localStorage.setItem('alamin_before_after', JSON.stringify(updated));
+              } catch (err) {}
+              return updated;
+            });
           }
         }
       }, (error) => {
-        console.warn("Before-after live sync notice:", error);
+        console.warn("Before-after main live sync notice:", error);
       });
 
-      return () => unsub();
+      const unsubBefore = onSnapshot(doc(db, 'before_after', 'before'), (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (data && data.image) {
+            setCurrentItem(prev => {
+              const updated = { ...prev, beforeImage: data.image };
+              try {
+                localStorage.setItem('alamin_before_after', JSON.stringify(updated));
+              } catch (err) {}
+              return updated;
+            });
+          }
+        }
+      }, (err) => console.warn("Before sync notice:", err));
+
+      const unsubAfter = onSnapshot(doc(db, 'before_after', 'after'), (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (data && data.image) {
+            setCurrentItem(prev => {
+              const updated = { ...prev, afterImage: data.image };
+              try {
+                localStorage.setItem('alamin_before_after', JSON.stringify(updated));
+              } catch (err) {}
+              return updated;
+            });
+          }
+        }
+      }, (err) => console.warn("After sync notice:", err));
+
+      return () => {
+        unsubMain();
+        unsubBefore();
+        unsubAfter();
+      };
     } catch (error) {
       console.warn("Before-after listener notice:", error);
     }

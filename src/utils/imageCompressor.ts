@@ -18,7 +18,8 @@ export interface CompressionResult {
 export async function compressImage(
   file: File,
   maxDimension = 1280,
-  initialQuality = 0.8
+  initialQuality = 0.8,
+  maxBase64Chars = 650000
 ): Promise<CompressionResult> {
   const originalSizeKb = Math.round(file.size / 1024);
 
@@ -69,12 +70,10 @@ export async function compressImage(
             dataUrl = canvas.toDataURL(format, quality);
           }
 
-          // Firestore rules require image.size <= 800,000 characters
-          // Target safe limit is 650,000 characters (~480 KB base64)
-          const MAX_BASE64_CHARS = 650000;
+          // Strict limit loop to fit within specified character size
           let iterations = 0;
-          while (dataUrl.length > MAX_BASE64_CHARS && quality > 0.4 && iterations < 5) {
-            quality -= 0.1;
+          while (dataUrl.length > maxBase64Chars && quality > 0.35 && iterations < 6) {
+            quality -= 0.08;
             dataUrl = canvas.toDataURL(format, quality);
             iterations++;
           }
@@ -107,5 +106,94 @@ export async function compressImage(
     };
 
     reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Optimizes an existing base64 dataUrl string to ensure it fits strict Firestore limits.
+ */
+export async function compressDataUrl(
+  dataUrl: string,
+  maxDimension = 1000,
+  initialQuality = 0.75,
+  maxBase64Chars = 320000
+): Promise<{ dataUrl: string; blob: Blob }> {
+  // If it's already an external HTTP URL or under the target size, return it
+  if (!dataUrl.startsWith('data:') || dataUrl.length <= maxBase64Chars) {
+    let blob: Blob;
+    try {
+      if (dataUrl.startsWith('data:')) {
+        const byteString = atob(dataUrl.split(',')[1]);
+        const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+        blob = new Blob([ab], { type: mimeString });
+      } else {
+        blob = new Blob([], { type: 'image/webp' });
+      }
+    } catch {
+      blob = new Blob([], { type: 'image/webp' });
+    }
+    return { dataUrl, blob };
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve({ dataUrl, blob: new Blob() });
+          return;
+        }
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        let format = 'image/webp';
+        let quality = initialQuality;
+        let resultUrl = canvas.toDataURL(format, quality);
+        if (resultUrl.startsWith('data:image/png')) {
+          format = 'image/jpeg';
+          resultUrl = canvas.toDataURL(format, quality);
+        }
+
+        let iterations = 0;
+        while (resultUrl.length > maxBase64Chars && quality > 0.35 && iterations < 6) {
+          quality -= 0.08;
+          resultUrl = canvas.toDataURL(format, quality);
+          iterations++;
+        }
+
+        const byteString = atob(resultUrl.split(',')[1]);
+        const mimeString = resultUrl.split(',')[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+        const blob = new Blob([ab], { type: mimeString });
+
+        resolve({ dataUrl: resultUrl, blob });
+      } catch {
+        resolve({ dataUrl, blob: new Blob() });
+      }
+    };
+    img.onerror = () => resolve({ dataUrl, blob: new Blob() });
+    img.src = dataUrl;
   });
 }
