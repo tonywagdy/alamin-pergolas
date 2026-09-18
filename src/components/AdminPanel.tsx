@@ -13,8 +13,11 @@ import {
   Clock, 
   X,
   Layers,
-  Settings
+  Settings,
+  Loader2,
+  Sparkles
 } from 'lucide-react';
+import { compressImage, CompressionResult } from '../utils/imageCompressor';
 import { db, auth, storage } from '../firebase';
 import { 
   collection, 
@@ -49,6 +52,15 @@ export const AdminPanel: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatusText, setUploadStatusText] = useState<string>('');
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [compressedDataUrl, setCompressedDataUrl] = useState<string>('');
+  const [compressedBlob, setCompressedBlob] = useState<Blob | null>(null);
+  const [compressionInfo, setCompressionInfo] = useState<{
+    originalSizeKb: number;
+    compressedSizeKb: number;
+    savingsPercent: number;
+  } | null>(null);
 
   // Leads list states
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -114,52 +126,101 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const resetForm = () => {
+    setTitle('');
+    setSelectedFile(null);
+    setPreviewUrl('');
+    setCompressedDataUrl('');
+    setCompressedBlob(null);
+    setCompressionInfo(null);
+    setUploadStatusText('');
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
+    if (!file) return;
+
+    setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    setIsCompressing(true);
+    setCompressionInfo(null);
+
+    try {
+      // Compress in browser: max 1280px dimension, web-optimal WebP/JPEG
+      const result: CompressionResult = await compressImage(file, 1280, 0.8);
+      setCompressedDataUrl(result.dataUrl);
+      setCompressedBlob(result.blob);
+      const savings = Math.max(0, Math.round(((result.originalSizeKb - result.compressedSizeKb) / result.originalSizeKb) * 100));
+      setCompressionInfo({
+        originalSizeKb: result.originalSizeKb,
+        compressedSizeKb: result.compressedSizeKb,
+        savingsPercent: savings,
+      });
+    } catch (err) {
+      console.warn("Client compression warning, will use direct fallback:", err);
+    } finally {
+      setIsCompressing(false);
     }
   };
 
   const handleUploadImage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !category || !selectedFile) return;
+    if (!title.trim() || !category || (!selectedFile && !compressedDataUrl)) return;
 
     setIsUploading(true);
-    try {
-      let imageUrl = '';
+    setUploadStatusText('جاري تجهيز الصورة...');
 
-      // Upload to Firebase Storage
-      if (storage) {
-        const fileExt = selectedFile.name.split('.').pop() || 'jpg';
-        const fileName = `gallery/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const storageRef = ref(storage, fileName);
-        
-        const uploadResult = await uploadBytes(storageRef, selectedFile);
-        imageUrl = await getDownloadURL(uploadResult.ref);
-      } else {
-        // Fallback: local object URL/data URL if storage is unavailable in prototype
-        imageUrl = previewUrl;
+    try {
+      let finalImageUrl = compressedDataUrl;
+      let blobToUpload = compressedBlob;
+
+      // If compression was still in progress or failed, compress now
+      if (!finalImageUrl && selectedFile) {
+        setUploadStatusText('جاري ضغط وتقليل حجم الصورة...');
+        const res = await compressImage(selectedFile, 1280, 0.8);
+        finalImageUrl = res.dataUrl;
+        blobToUpload = res.blob;
       }
 
+      // Try Firebase Storage with a strict 3.5s timeout; fallback instantly to high-quality compressed Base64
+      if (storage && blobToUpload) {
+        try {
+          setUploadStatusText('جاري رفع الصورة...');
+          const uploadPromise = (async () => {
+            const fileName = `gallery/${Date.now()}_${Math.random().toString(36).substring(7)}.webp`;
+            const storageRef = ref(storage, fileName);
+            const uploadResult = await uploadBytes(storageRef, blobToUpload);
+            return await getDownloadURL(uploadResult.ref);
+          })();
+
+          const timeoutPromise = new Promise<string>((_, reject) =>
+            setTimeout(() => reject(new Error('Storage upload timeout')), 3500)
+          );
+
+          finalImageUrl = await Promise.race([uploadPromise, timeoutPromise]);
+        } catch (storageErr) {
+          console.warn("Storage upload bypassed or timed out, saving directly to Firestore (fast):", storageErr);
+          // finalImageUrl remains compressedDataUrl which fits safely in Firestore rules
+        }
+      }
+
+      setUploadStatusText('جاري الحفظ في المعرض...');
       await addDoc(collection(db, 'gallery'), {
         title: title.trim(),
         category,
-        image: imageUrl,
+        image: finalImageUrl || previewUrl,
         createdAt: serverTimestamp()
       });
 
-      setTitle('');
-      setSelectedFile(null);
-      setPreviewUrl('');
-      alert("تمت إضافة الصورة إلى المعرض بنجاح!");
+      resetForm();
+      alert("تمت إضافة الصورة إلى المعرض بنجاح وبسرعة فائقة!");
       setIsOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload error:", error);
-      alert("حدث خطأ أثناء الرفع، يرجى التأكد من اتصال الإنترنت والمحاولة ثانية.");
+      alert(`حدث خطأ أثناء الرفع والحفظ: ${error?.message || 'يرجى المحاولة مرة أخرى'}`);
     } finally {
       setIsUploading(false);
+      setUploadStatusText('');
     }
   };
 
@@ -308,28 +369,75 @@ export const AdminPanel: React.FC = () => {
                       type="file" 
                       accept="image/*" 
                       onChange={handleFileSelect} 
-                      required 
+                      required={!previewUrl}
+                      disabled={isUploading}
                       className="w-full text-xs text-gray-600 file:ml-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#143d6a] file:text-white hover:file:bg-[#f39c12] file:cursor-pointer" 
                     />
                   </div>
 
+                  {/* Compression Progress & Size Reduction Badge */}
+                  {isCompressing && (
+                    <div className="bg-amber-50 text-amber-800 text-[11px] p-3 rounded-xl flex items-center gap-2 border border-amber-200">
+                      <Loader2 className="animate-spin text-[#f39c12]" size={15} />
+                      <span className="font-bold">جاري ضغط الصورة وتجهيزها بأعلى جودة وأخف حجم...</span>
+                    </div>
+                  )}
+
+                  {compressionInfo && !isCompressing && (
+                    <div className="bg-emerald-50 text-emerald-800 text-[11px] p-2.5 rounded-xl flex items-center justify-between border border-emerald-200">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                        <span>
+                          الحجم: {compressionInfo.originalSizeKb > 1024 ? `${(compressionInfo.originalSizeKb / 1024).toFixed(1)} MB` : `${compressionInfo.originalSizeKb} KB`} ➔ {compressionInfo.compressedSizeKb} KB
+                        </span>
+                      </div>
+                      <span className="bg-emerald-600 text-white px-2 py-0.5 rounded-full font-black text-[10px] shrink-0">
+                        وفر {compressionInfo.savingsPercent}% (رفع فوري)
+                      </span>
+                    </div>
+                  )}
+
                   {previewUrl && (
-                    <div className="rounded-xl overflow-hidden h-36 border border-gray-200 bg-black/5">
+                    <div className="relative rounded-xl overflow-hidden h-40 border border-gray-200 bg-black/5 group">
                       <img src={previewUrl} alt="معاينة العمل" className="w-full h-full object-cover" />
+                      {!isUploading && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedFile(null);
+                            setPreviewUrl('');
+                            setCompressedDataUrl('');
+                            setCompressedBlob(null);
+                            setCompressionInfo(null);
+                          }}
+                          className="absolute top-2 left-2 bg-black/70 hover:bg-red-600 text-white p-1.5 rounded-full transition-colors cursor-pointer"
+                          title="إلغاء واختيار صورة أخرى"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
                     </div>
                   )}
 
                   <button 
                     type="submit" 
-                    disabled={isUploading || !title || !selectedFile} 
+                    disabled={isUploading || isCompressing || !title.trim() || (!selectedFile && !compressedDataUrl)} 
                     className="w-full bg-[#f39c12] text-white py-3.5 rounded-xl font-bold text-sm hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-md"
                   >
                     {isUploading ? (
-                      <span>جاري الرفع والحفظ...</span>
+                      <>
+                        <Loader2 className="animate-spin" size={16} />
+                        <span>{uploadStatusText || 'جاري الرفع والحفظ...'}</span>
+                      </>
+                    ) : isCompressing ? (
+                      <>
+                        <Loader2 className="animate-spin" size={16} />
+                        <span>جاري تجهيز الصورة للرفع...</span>
+                      </>
                     ) : (
                       <>
                         <Upload size={16} />
-                        <span>نشر الصورة في المعرض الآن</span>
+                        <span>نشر الصورة في المعرض الآن (فوري)</span>
                       </>
                     )}
                   </button>
