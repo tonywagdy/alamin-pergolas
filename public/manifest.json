@@ -1,0 +1,28 @@
+{
+  "name": "الأمين للبرجولات - تصنيع وتركيب أحدث البرجولات والديكورات الخشبية",
+  "short_name": "الأمين للبرجولات",
+  "description": "شركة متخصصة في تصنيع وتركيب أحدث البرجولات الخشبية للروف والحدائق والديكورات الخشبية في مصر بأعلى جودة وضمان معتمد.",
+  "start_url": "/alamin-pergolas/",
+  "display": "standalone",
+  "background_color": "#143d6a",
+  "theme_color": "#143d6a",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/alamin-pergolas/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/alamin-pergolas/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/alamin-pergolas/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

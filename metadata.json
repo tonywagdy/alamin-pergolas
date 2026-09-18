@@ -1,5 +1,6 @@
 {
   "name": "الأمين للبرجولات",
   "description": "شركة الأمين للبرجولات والأعمال الخشبية - متخصصون في تصميم وتركيب أفضل البرجولات الخشبية والأسقف الديكورية بأعلى جودة.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "GalleryItem": {
+      "title": "Gallery Item",
+      "description": "An image item in the gallery",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "The title of the image"
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the image"
+        },
+        "image": {
+          "type": "string",
+          "description": "The base64 encoded image or Storage download URL"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "The time the image was added"
+        }
+      },
+      "required": ["title", "category", "image", "createdAt"]
+    },
+    "DeletedStaticImage": {
+      "title": "Deleted Static Image",
+      "description": "Tracks removed default static images",
+      "type": "object",
+      "properties": {
+        "deletedAt": {
+          "type": "timestamp",
+          "description": "Timestamp when the image was hidden/deleted"
+        }
+      },
+      "required": ["deletedAt"]
+    },
+    "Lead": {
+      "title": "Lead",
+      "description": "Customer quote or contact request",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Customer full name",
+          "maxLength": 100
+        },
+        "phone": {
+          "type": "string",
+          "description": "Customer phone number",
+          "maxLength": 30
+        },
+        "service": {
+          "type": "string",
+          "description": "Selected pergola or woodwork service",
+          "maxLength": 100
+        },
+        "message": {
+          "type": "string",
+          "description": "Customer inquiry message or specifications",
+          "maxLength": 1000
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "Submission timestamp"
+        },
+        "status": {
+          "type": "string",
+          "description": "Lead status (new, contacted, closed)",
+          "enum": ["new", "contacted", "closed"]
+        }
+      },
+      "required": ["name", "phone", "service", "createdAt", "status"]
+    }
+  },
+  "firestore": {
+    "/gallery/{itemId}": {
+      "schema": "GalleryItem",
+      "description": "Collection of gallery images"
+    },
+    "/deleted_static_images/{id}": {
+      "schema": "DeletedStaticImage",
+      "description": "Collection of hidden static images"
+    },
+    "/leads/{leadId}": {
+      "schema": "Lead",
+      "description": "Collection of customer contact leads"
+    }
+  }
+}

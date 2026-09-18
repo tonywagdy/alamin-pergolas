@@ -43,6 +43,16 @@ service cloud.firestore {
              data.createdAt is timestamp;
     }
 
+    function isValidLead(data) {
+      return hasOnlyAllowedFields(['name', 'phone', 'service', 'message', 'createdAt', 'status']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 30 &&
+             data.service is string && data.service.size() > 0 && data.service.size() <= 100 &&
+             data.message is string && data.message.size() <= 1000 &&
+             data.createdAt is timestamp &&
+             data.status is string && data.status in ['new', 'contacted', 'closed'];
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -55,6 +65,22 @@ service cloud.firestore {
       allow create: if isAdmin() && isValidGalleryItem(request.resource.data);
       allow update: if isAdmin() && isValidGalleryItem(request.resource.data);
       allow delete: if isAdmin();
+    }
+
+    match /deleted_static_images/{imageId} {
+      // Anyone can read the list of deleted static images
+      allow read: if true;
+      
+      // Only the admin can mark a static image as deleted
+      allow write: if isAdmin();
+    }
+
+    match /leads/{leadId} {
+      // Anyone can submit a lead request with validated fields
+      allow create: if isValidLead(request.resource.data);
+      
+      // Only the authenticated admin can read or manage leads
+      allow read, update, delete: if isAdmin();
     }
   }
 }
