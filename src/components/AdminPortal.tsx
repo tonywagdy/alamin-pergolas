@@ -482,6 +482,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       return;
     }
 
+    if (!auth.currentUser) {
+      showToast("انتهت جلسة تسجيل الدخول، يرجى تسجيل الدخول بحساب المدير أولاً", "error");
+      return;
+    }
+
     setIsSavingBA(true);
     setBaSuccessMsg('');
 
@@ -527,25 +532,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
 
       const cleanTitle = baTitle.trim() || BEFORE_AFTER_ITEMS[0].title;
 
-      // 3. Save to Firestore (both main and dedicated sub-documents to guarantee 100% cloud sync across all devices)
-      const saveMainPromise = setDoc(doc(db, 'before_after', 'main'), {
+      // 3. Save to Firestore main document (primary source of truth)
+      await setDoc(doc(db, 'before_after', 'main'), {
         beforeImage: finalBefore,
         afterImage: finalAfter,
         title: cleanTitle,
         updatedAt: serverTimestamp()
       }, { merge: true });
 
-      const saveBeforePromise = setDoc(doc(db, 'before_after', 'before'), {
-        image: finalBefore,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-
-      const saveAfterPromise = setDoc(doc(db, 'before_after', 'after'), {
-        image: finalAfter,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-
-      await Promise.all([saveMainPromise, saveBeforePromise, saveAfterPromise]);
+      // Sync sub-documents for redundancy and high-speed multi-device delivery
+      try {
+        await Promise.all([
+          setDoc(doc(db, 'before_after', 'before'), {
+            image: finalBefore,
+            updatedAt: serverTimestamp()
+          }, { merge: true }),
+          setDoc(doc(db, 'before_after', 'after'), {
+            image: finalAfter,
+            updatedAt: serverTimestamp()
+          }, { merge: true })
+        ]);
+      } catch (subErr) {
+        console.warn("Sub-doc sync notice:", subErr);
+      }
 
       // 4. Update local states & cache now that cloud Firestore is safely committed
       setBaBeforeImage(finalBefore);
