@@ -21,48 +21,49 @@ export const About: React.FC = () => {
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7 }}
-            className="relative order-2 lg:order-1"
+            className="relative order-2 lg:order-1 mt-6 sm:mt-0"
           >
             <div className="relative rounded-3xl overflow-hidden shadow-xl border-4 border-white">
               <img 
                 src="./input_file_13.webp" 
                 alt="فريق الأمين للبرجولات أثناء تصنيع وتركيب برجولة خشبية" 
-                className="w-full h-[450px] object-cover"
+                className="w-full h-[420px] sm:h-[450px] object-cover"
                 loading="lazy"
                 decoding="async"
                 referrerPolicy="no-referrer"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#143d6a]/80 via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#143d6a]/95 via-[#143d6a]/40 to-transparent" />
               
-              <div className="absolute bottom-6 right-6 left-6 text-white">
-                <p className="text-xl font-extrabold mb-1">فريق الأمين للبرجولات</p>
-                <p className="text-sm text-gray-200">صناعة مصرية بأيدي محترفة تفخر بالدقة والأمانة</p>
+              {/* Image Caption - elevated on mobile so it never collides with the bottom guarantee badge */}
+              <div className="absolute bottom-20 sm:bottom-6 right-4 sm:right-6 left-4 sm:left-auto sm:max-w-md text-white z-10 text-right">
+                <p className="text-lg sm:text-xl font-extrabold mb-1 drop-shadow-md">فريق الأمين للبرجولات</p>
+                <p className="text-xs sm:text-sm text-gray-200 drop-shadow-sm leading-relaxed">صناعة مصرية بأيدي محترفة تفخر بالدقة والأمانة</p>
               </div>
             </div>
 
             {/* Floating Experience Badge */}
-            <div className="absolute -top-6 -right-4 sm:-right-6 bg-white p-5 rounded-2xl shadow-xl border border-gray-100 flex items-center gap-3">
-              <div className="bg-[#143d6a] text-white p-3 rounded-xl">
-                <Award className="w-6 h-6 text-[#f39c12]" />
+            <div className="absolute -top-5 sm:-top-6 right-3 sm:-right-6 bg-white p-3.5 sm:p-5 rounded-2xl shadow-xl border border-gray-100 flex items-center gap-3 z-20">
+              <div className="bg-[#143d6a] text-white p-2.5 sm:p-3 rounded-xl">
+                <Award className="w-5 h-5 sm:w-6 sm:h-6 text-[#f39c12]" />
               </div>
               <div>
-                <p className="text-2xl font-black text-[#143d6a] leading-tight">
+                <p className="text-xl sm:text-2xl font-black text-[#143d6a] leading-tight">
                   {COMPANY_STATS.yearsOfExperience} سنوات
                 </p>
-                <p className="text-xs text-gray-500 font-bold">خبرة موثوقة في مصر</p>
+                <p className="text-[11px] sm:text-xs text-gray-500 font-bold">خبرة موثوقة في مصر</p>
               </div>
             </div>
 
             {/* Secondary Guarantee Badge */}
-            <div className="absolute -bottom-6 -left-4 sm:-left-6 bg-white p-4 rounded-2xl shadow-xl border border-gray-100 flex items-center gap-3">
-              <div className="bg-amber-50 p-2.5 rounded-xl text-[#f39c12]">
-                <Shield className="w-6 h-6" />
+            <div className="absolute -bottom-5 sm:-bottom-6 left-3 sm:-left-6 bg-white p-3.5 sm:p-4 rounded-2xl shadow-xl border border-gray-100 flex items-center gap-2.5 sm:gap-3 z-20">
+              <div className="bg-amber-50 p-2 sm:p-2.5 rounded-xl text-[#f39c12]">
+                <Shield className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
-                <p className="text-lg font-black text-[#143d6a] leading-tight">
+                <p className="text-base sm:text-lg font-black text-[#143d6a] leading-tight">
                   ضمان حقيقي
                 </p>
-                <p className="text-xs text-gray-500 font-bold">متابعة وصيانة بعد التسليم</p>
+                <p className="text-[11px] sm:text-xs text-gray-500 font-bold">متابعة وصيانة بعد التسليم</p>
               </div>
             </div>
           </motion.div>
