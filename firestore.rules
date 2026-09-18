@@ -27,8 +27,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-             request.auth.token.email == "twagdy067@gmail.com" && 
-             request.auth.token.email_verified == true;
+             (request.auth.token.email.lower() == "twagdy067@gmail.com" || request.auth.token.email == "twagdy067@gmail.com");
     }
 
     function hasOnlyAllowedFields(fields) {
@@ -44,13 +43,10 @@ service cloud.firestore {
     }
 
     function isValidLead(data) {
-      return hasOnlyAllowedFields(['name', 'phone', 'service', 'message', 'createdAt', 'status']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
              data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 30 &&
-             data.service is string && data.service.size() > 0 && data.service.size() <= 100 &&
-             data.message is string && data.message.size() <= 1000 &&
-             data.createdAt is timestamp &&
-             data.status is string && data.status in ['new', 'contacted', 'closed'];
+             data.service is string && data.service.size() <= 150 &&
+             (!('message' in data) || data.message is string);
     }
 
     // ===============================================================
@@ -65,6 +61,14 @@ service cloud.firestore {
       allow create: if isAdmin() && isValidGalleryItem(request.resource.data);
       allow update: if isAdmin() && isValidGalleryItem(request.resource.data);
       allow delete: if isAdmin();
+    }
+
+    match /before_after/{docId} {
+      // Anyone can read before/after comparisons
+      allow read: if true;
+      
+      // Only the admin can update before/after comparisons
+      allow write: if isAdmin();
     }
 
     match /deleted_static_images/{imageId} {

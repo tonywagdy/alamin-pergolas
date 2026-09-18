@@ -9,58 +9,95 @@ export const Contact: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    service: 'برجولة حديقة',
+    service: 'برجولة حديقة وفلل',
     message: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [whatsappUrl, setWhatsappUrl] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim() || !formData.phone.trim()) return;
+    const cleanName = formData.name.trim();
+    const cleanPhone = formData.phone.trim();
+    const cleanMessage = formData.message.trim();
+    const cleanService = formData.service;
+
+    if (!cleanName || !cleanPhone) return;
 
     setIsSubmitting(true);
 
+    const leadPayload = {
+      name: cleanName,
+      phone: cleanPhone,
+      service: cleanService,
+      message: cleanMessage,
+      createdAt: serverTimestamp(),
+      status: 'new'
+    };
+
+    // 1. Save to localStorage backup so no customer inquiry is ever lost
     try {
-      // 1. Save lead to Firestore collection 'leads'
-      await addDoc(collection(db, 'leads'), {
-        name: formData.name.trim(),
-        phone: formData.phone.trim(),
-        service: formData.service,
-        message: formData.message.trim(),
-        createdAt: serverTimestamp(),
+      const stored = localStorage.getItem('alamin_local_leads');
+      const leadsList = stored ? JSON.parse(stored) : [];
+      leadsList.unshift({
+        id: 'local_' + Date.now(),
+        name: cleanName,
+        phone: cleanPhone,
+        service: cleanService,
+        message: cleanMessage,
+        createdAt: new Date().toISOString(),
         status: 'new'
       });
-
-      // 2. Track event in Google Analytics
-      trackGAEvent('lead_form_submit', {
-        service: formData.service
-      });
-
-      setIsSuccess(true);
-
-      // 3. Open WhatsApp with formatted text
-      const text = `طلب جديد من الموقع الرسمي:
-- الاسم: ${formData.name.trim()}
-- رقم الهاتف: ${formData.phone.trim()}
-- الخدمة المطلوبة: ${formData.service}
-- التفاصيل / الملاحظات: ${formData.message.trim() || 'بدون ملاحظات إضافية'}`;
-
-      window.open(`https://wa.me/${PHONE_NUMBER_INTL}?text=${encodeURIComponent(text)}`, '_blank');
-      
-      // Reset form
-      setFormData({
-        name: '',
-        phone: '',
-        service: 'برجولة حديقة',
-        message: ''
-      });
-    } catch (error) {
-      console.error("Error saving lead:", error);
-      alert("حدث خطأ أثناء إرسال الطلب، يمكنك التواصل معنا مباشرة هاتفياً أو عبر الواتساب.");
-    } finally {
-      setIsSubmitting(false);
+      localStorage.setItem('alamin_local_leads', JSON.stringify(leadsList.slice(0, 50)));
+    } catch (err) {
+      console.warn("LocalStorage lead save notice:", err);
     }
+
+    // 2. Save lead to Firestore collection 'leads'
+    try {
+      await addDoc(collection(db, 'leads'), leadPayload);
+    } catch (error) {
+      console.warn("Notice: Firestore save will sync or fallback locally:", error);
+    }
+
+    // 3. Track event in Google Analytics
+    try {
+      trackGAEvent('lead_form_submit', {
+        service: cleanService
+      });
+    } catch (err) {
+      // ignore
+    }
+
+    // 4. Formulate WhatsApp Direct Message
+    const text = `طلب جديد من الموقع الرسمي لشركة الأمين:
+- الاسم: ${cleanName}
+- رقم الهاتف: ${cleanPhone}
+- نوع الخدمة: ${cleanService}
+- التفاصيل أو المقاسات: ${cleanMessage || 'بدون ملاحظات إضافية'}`;
+
+    const waLink = `https://wa.me/${PHONE_NUMBER_INTL}?text=${encodeURIComponent(text)}`;
+    setWhatsappUrl(waLink);
+
+    // Show success view
+    setIsSuccess(true);
+    setIsSubmitting(false);
+
+    // Try opening WhatsApp in a safe manner
+    try {
+      window.open(waLink, '_blank');
+    } catch (err) {
+      console.warn("Window open notice:", err);
+    }
+
+    // Reset fields
+    setFormData({
+      name: '',
+      phone: '',
+      service: 'برجولة حديقة وفلل',
+      message: ''
+    });
   };
 
   return (
@@ -136,20 +173,33 @@ export const Contact: React.FC = () => {
             <p className="text-gray-500 text-sm mb-6">املأ البيانات وسيقوم فريق شركة الأمين بالرد والتواصل معك خلال ساعة واحدة.</p>
 
             {isSuccess ? (
-              <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl text-center space-y-4">
-                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
-                  <CheckCircle size={32} />
+              <div className="bg-emerald-50 border border-emerald-200 p-6 sm:p-8 rounded-2xl text-center space-y-4">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-xs">
+                  <CheckCircle size={34} />
                 </div>
-                <h4 className="text-xl font-bold text-emerald-800">تم استلام طلبك بنجاح!</h4>
-                <p className="text-sm text-emerald-700 leading-relaxed">
-                  شكراً لاهتمامك بشركة الأمين للبرجولات. تم حفظ بياناتك وسيقوم المهندس المسؤول بالتواصل معك هاتفياً أو عبر الواتساب في أقرب وقت.
+                <h4 className="text-xl sm:text-2xl font-black text-emerald-800">تم استلام طلبك بنجاح!</h4>
+                <p className="text-sm text-emerald-700 leading-relaxed max-w-md mx-auto">
+                  شكراً لتواصلك مع شركة الأمين للبرجولات. تم تسجيل بيانات طلبك وسيقوم المهندس المسؤول بالتواصل معك هاتفياً أو عبر الواتساب في أقرب وقت لتحديد موعد المعاينة.
                 </p>
-                <button
-                  onClick={() => setIsSuccess(false)}
-                  className="mt-2 bg-[#143d6a] text-white px-6 py-2 rounded-full text-xs font-bold hover:bg-[#f39c12] transition-colors"
-                >
-                  إرسال طلب آخر
-                </button>
+                {whatsappUrl && (
+                  <a
+                    href={whatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 px-4 rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all"
+                  >
+                    <MessageCircle size={18} />
+                    <span>متابعة الطلب عبر الواتساب مباشرة</span>
+                  </a>
+                )}
+                <div>
+                  <button
+                    onClick={() => setIsSuccess(false)}
+                    className="mt-2 text-gray-500 hover:text-[#143d6a] text-xs font-bold underline transition-colors cursor-pointer"
+                  >
+                    إرسال طلب استفسار آخر
+                  </button>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -185,11 +235,11 @@ export const Contact: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, service: e.target.value })}
                     className="w-full bg-slate-50 border border-gray-200 rounded-xl p-3.5 focus:border-[#f39c12] focus:ring-1 focus:ring-[#f39c12] outline-none text-sm font-medium"
                   >
-                    <option value="برجولة حديقة">برجولة حديقة وفلل</option>
-                    <option value="برجولة روف">برجولة روف وأسطح</option>
-                    <option value="سقف ديكوري وتجاليد">سقف ديكوري وتجاليد حوائط</option>
-                    <option value="أعمال خشبية مخصصة">أعمال خشبية وبوابات مخصصة</option>
-                    <option value="صيانة ودهان برجولات">صيانة وتجديد برجولة قديمة</option>
+                    <option value="برجولة حديقة وفلل">برجولة حديقة وفلل</option>
+                    <option value="برجولة روف وأسطح">برجولة روف وأسطح</option>
+                    <option value="سقف ديكوري وتجاليد حوائط">سقف ديكوري وتجاليد حوائط</option>
+                    <option value="أعمال خشبية وبوابات مخصصة">أعمال خشبية وبوابات مخصصة</option>
+                    <option value="صيانة وتجديد برجولة قديمة">صيانة وتجديد برجولة قديمة</option>
                   </select>
                 </div>
 

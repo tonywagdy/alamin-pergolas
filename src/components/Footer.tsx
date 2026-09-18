@@ -1,8 +1,12 @@
 import React from 'react';
-import { MessageCircle, Facebook, Instagram, Phone, MapPin } from 'lucide-react';
+import { MessageCircle, Facebook, Instagram, Phone, MapPin, Lock } from 'lucide-react';
 import { LOGO_URL, PHONE_NUMBER_INTL, PHONE_NUMBER_LOCAL, trackGAEvent } from '../data';
 
-export const Footer: React.FC = () => {
+interface FooterProps {
+  onNavigateToAdmin?: () => void;
+}
+
+export const Footer: React.FC<FooterProps> = ({ onNavigateToAdmin }) => {
   return (
     <footer className="bg-[#0e2c4d] text-white py-14 border-t border-white/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -109,7 +113,24 @@ export const Footer: React.FC = () => {
 
         <div className="pt-8 flex flex-col sm:flex-row justify-between items-center text-xs text-gray-400 gap-4">
           <p>© {new Date().getFullYear()} شركة الأمين للبرجولات. جميع الحقوق محفوظة.</p>
-          <p>تصميم وتطوير احترافي فائق الأمان والسرعة.</p>
+          <div className="flex items-center gap-4">
+            <p>تصميم وتطوير احترافي فائق الأمان والسرعة.</p>
+            <button
+              onClick={() => {
+                if (onNavigateToAdmin) {
+                  onNavigateToAdmin();
+                } else {
+                  window.location.hash = 'admin';
+                }
+              }}
+              className="text-gray-500 hover:text-amber-400 transition-colors flex items-center gap-1 cursor-pointer"
+              title="بوابة الإدارة المركزية"
+              aria-label="بوابة الإدارة المركزية لشركة الأمين"
+            >
+              <Lock size={12} />
+              <span>بوابة الإدارة</span>
+            </button>
+          </div>
         </div>
       </div>
     </footer>

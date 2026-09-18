@@ -36,6 +36,30 @@
       },
       "required": ["deletedAt"]
     },
+    "BeforeAfterComparison": {
+      "title": "Before After Comparison",
+      "description": "Customizable before and after pergola comparison images",
+      "type": "object",
+      "properties": {
+        "beforeImage": {
+          "type": "string",
+          "description": "Image before installation"
+        },
+        "afterImage": {
+          "type": "string",
+          "description": "Image after installation"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title description of the transformation"
+        },
+        "updatedAt": {
+          "type": "timestamp",
+          "description": "Timestamp of the last update"
+        }
+      },
+      "required": ["beforeImage", "afterImage"]
+    },
     "Lead": {
       "title": "Lead",
       "description": "Customer quote or contact request",
@@ -82,6 +106,10 @@
     "/deleted_static_images/{id}": {
       "schema": "DeletedStaticImage",
       "description": "Collection of hidden static images"
+    },
+    "/before_after/{docId}": {
+      "schema": "BeforeAfterComparison",
+      "description": "Before and after comparison document"
     },
     "/leads/{leadId}": {
       "schema": "Lead",

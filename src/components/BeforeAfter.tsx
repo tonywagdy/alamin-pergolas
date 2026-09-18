@@ -1,13 +1,63 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { ArrowLeftRight, Sparkles } from 'lucide-react';
 import { BEFORE_AFTER_ITEMS } from '../data';
+import { db } from '../firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 export const BeforeAfter: React.FC = () => {
   const [sliderPosition, setSliderPosition] = useState<number>(50);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const currentItem = BEFORE_AFTER_ITEMS[0];
+  // Dynamic Before & After item with local storage caching for immediate 0ms render
+  const [currentItem, setCurrentItem] = useState(() => {
+    try {
+      const cached = localStorage.getItem('alamin_before_after');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.beforeImage && parsed.afterImage) {
+          return {
+            ...BEFORE_AFTER_ITEMS[0],
+            ...parsed
+          };
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return BEFORE_AFTER_ITEMS[0];
+  });
+
+  // Listen to live updates from Firestore
+  useEffect(() => {
+    try {
+      const unsub = onSnapshot(doc(db, 'before_after', 'main'), (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (data && data.beforeImage && data.afterImage) {
+            const updated = {
+              id: 1,
+              title: data.title || BEFORE_AFTER_ITEMS[0].title,
+              description: data.description || BEFORE_AFTER_ITEMS[0].description,
+              beforeImage: data.beforeImage,
+              afterImage: data.afterImage,
+              location: data.location || BEFORE_AFTER_ITEMS[0].location
+            };
+            setCurrentItem(updated);
+            try {
+              localStorage.setItem('alamin_before_after', JSON.stringify(updated));
+            } catch (err) {}
+          }
+        }
+      }, (error) => {
+        console.warn("Before-after live sync notice:", error);
+      });
+
+      return () => unsub();
+    } catch (error) {
+      console.warn("Before-after listener notice:", error);
+    }
+  }, []);
 
   const updatePosition = useCallback((clientX: number) => {
     if (!containerRef.current) return;
