@@ -99,7 +99,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       devChatProxyPlugin(env.GEMINI_API_KEY || process.env.GEMINI_API_KEY || '')
     ],
-    base: '/alamin-pergolas/',
+    base: '/',
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
