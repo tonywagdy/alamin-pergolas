@@ -111,10 +111,22 @@ export const Footer: React.FC<FooterProps> = ({ onNavigateToAdmin }) => {
           </div>
         </div>
 
-        <div className="pt-8 flex flex-col sm:flex-row justify-between items-center text-xs text-gray-400 gap-4">
-          <p>© {new Date().getFullYear()} شركة الأمين للبرجولات. جميع الحقوق محفوظة.</p>
+        <div className="pt-8 flex flex-col md:flex-row justify-between items-center text-xs text-gray-400 gap-4 border-t border-white/5">
+          <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-center sm:text-right">
+            <span>© {new Date().getFullYear()} Al-Amin Pergolas</span>
+            <span className="hidden sm:inline text-white/20">|</span>
+            <span className="text-gray-400">جميع الحقوق محفوظة</span>
+          </div>
+
+          {/* Developer Credit */}
+          <div className="flex items-center gap-1.5 text-gray-300 font-medium tracking-normal text-center" dir="ltr">
+            <span className="text-gray-400">Designed &amp; Developed by</span>
+            <span className="text-amber-400 font-semibold tracking-wide hover:text-amber-300 transition-colors">Tony Wagdy</span>
+            <span className="text-white/30">·</span>
+            <span className="text-gray-400">Web Development</span>
+          </div>
+
           <div className="flex items-center gap-4">
-            <p>تصميم وتطوير احترافي فائق الأمان والسرعة.</p>
             <button
               onClick={() => {
                 if (onNavigateToAdmin) {
