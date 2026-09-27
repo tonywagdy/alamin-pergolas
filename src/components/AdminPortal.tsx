@@ -29,7 +29,15 @@ import {
   Check,
   AlertTriangle,
   AlertCircle,
-  X
+  X,
+  LayoutDashboard,
+  History,
+  GripVertical,
+  ChevronUp,
+  ChevronDown,
+  ListOrdered,
+  Calendar,
+  ArrowUpRight
 } from 'lucide-react';
 import { compressImage, compressDataUrl, CompressionResult } from '../utils/imageCompressor';
 import { db, auth, storage } from '../firebase';
@@ -43,7 +51,8 @@ import {
   orderBy, 
   updateDoc, 
   deleteDoc, 
-  doc 
+  doc,
+  writeBatch
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
@@ -53,7 +62,7 @@ import {
   onAuthStateChanged, 
   User as FirebaseUser 
 } from 'firebase/auth';
-import { Lead, Project } from '../types';
+import { Lead, Project, ActivityLogItem } from '../types';
 import { BEFORE_AFTER_ITEMS, PROJECTS, LOGO_URL, PHONE_NUMBER_INTL } from '../data';
 
 const AUTHORIZED_ADMIN_EMAIL = 'twagdy067@gmail.com';
@@ -75,7 +84,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'leads' | 'gallery' | 'beforeAfter'>('leads');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'leads' | 'gallery' | 'beforeAfter' | 'activity'>('dashboard');
 
   // Leads state
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -86,6 +95,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   const [firestoreProjects, setFirestoreProjects] = useState<Project[]>([]);
   const [deletedStaticIds, setDeletedStaticIds] = useState<number[]>([]);
   const [galleryCategoryFilter, setGalleryCategoryFilter] = useState('الكل');
+  const [draggedProjectIndex, setDraggedProjectIndex] = useState<number | null>(null);
+  const [dragOverProjectIndex, setDragOverProjectIndex] = useState<number | null>(null);
+
+  // Activity Log state
+  const [activities, setActivities] = useState<ActivityLogItem[]>([]);
+  const [activityFilter, setActivityFilter] = useState<'all' | 'leads' | 'gallery' | 'before_after'>('all');
   
   // Gallery Upload form states
   const [title, setTitle] = useState('');
@@ -124,6 +139,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   // In-App Action Confirmations & Toasts (Replaces window.confirm/alert for 100% iframe reliability)
   const [leadIdPendingDelete, setLeadIdPendingDelete] = useState<string | null>(null);
   const [galleryItemPendingDelete, setGalleryItemPendingDelete] = useState<string | number | null>(null);
+  const [activityPendingDelete, setActivityPendingDelete] = useState<string | null>(null);
+  const [showClearAllActivitiesConfirm, setShowClearAllActivitiesConfirm] = useState(false);
+  const [isDeletingActivity, setIsDeletingActivity] = useState(false);
   const [showResetBAConfirm, setShowResetBAConfirm] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
@@ -192,13 +210,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     });
 
     // 2. Gallery listener
-    const qGallery = query(collection(db, 'gallery'), orderBy('createdAt', 'desc'));
+    const qGallery = collection(db, 'gallery');
     const unsubGallery = onSnapshot(qGallery, (snapshot) => {
-      const items: Project[] = snapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...(docSnap.data() as any),
-        isFirestore: true
-      }));
+      const items: Project[] = snapshot.docs.map(docSnap => {
+        const data = docSnap.data() as any;
+        return {
+          id: docSnap.id,
+          ...data,
+          isFirestore: true,
+          order: typeof data.order === 'number' ? data.order : undefined
+        };
+      });
       setFirestoreProjects(items);
     }, (err) => console.warn("Gallery error:", err));
 
@@ -248,6 +270,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       }
     }, (err) => console.warn("BA after fetch error:", err));
 
+    // 5. Activity log listener
+    const qActivity = query(collection(db, 'activity_log'), orderBy('createdAt', 'desc'));
+    const unsubActivity = onSnapshot(qActivity, (snapshot) => {
+      const items: ActivityLogItem[] = snapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...(docSnap.data() as any)
+      }));
+      setActivities(items);
+    }, (err) => console.warn("Activity log fetch notice:", err));
+
     return () => {
       unsubLeads();
       unsubGallery();
@@ -255,6 +287,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       unsubBAMain();
       unsubBABefore();
       unsubBAAfter();
+      unsubActivity();
     };
   }, [user]);
 
@@ -283,16 +316,78 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     }
   };
 
+  // Activity Logger Helper
+  const logActivity = async (type: 'leads' | 'gallery' | 'before_after', description: string) => {
+    try {
+      await addDoc(collection(db, 'activity_log'), {
+        type,
+        description,
+        createdAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.warn("Activity log write notice:", err);
+    }
+  };
+
+  // Activity Log deletion actions
+  const handleDeleteActivity = async (id?: string) => {
+    if (!id) return;
+    setActivityPendingDelete(null);
+    setActivities(prev => prev.filter(a => a.id !== id));
+    showToast("تم حذف السجل بنجاح", "success");
+
+    try {
+      await deleteDoc(doc(db, 'activity_log', id));
+    } catch (err: any) {
+      console.error("Delete activity record error:", err);
+      showToast("تعذر حذف السجل من السيرفر", "error");
+    }
+  };
+
+  const handleClearAllActivities = async () => {
+    setShowClearAllActivitiesConfirm(false);
+    if (activities.length === 0) return;
+
+    setIsDeletingActivity(true);
+    const toDelete = [...activities];
+    setActivities([]);
+    showToast("جاري مسح السجلات...", "success");
+
+    try {
+      const batch = writeBatch(db);
+      toDelete.forEach(act => {
+        if (act.id) {
+          batch.delete(doc(db, 'activity_log', act.id));
+        }
+      });
+      await batch.commit();
+      showToast("تم مسح جميع السجلات بنجاح!", "success");
+    } catch (err: any) {
+      console.error("Clear all activities error:", err);
+      showToast("تعذر مسح كافة السجلات من السيرفر", "error");
+    } finally {
+      setIsDeletingActivity(false);
+    }
+  };
+
   // Lead Actions
   const handleUpdateLeadStatus = async (leadId: string, newStatus: 'new' | 'contacted' | 'closed') => {
+    const targetLead = leads.find(l => l.id === leadId);
+    const statusLabels: Record<string, string> = {
+      new: 'جديد (لم يتم الرد)',
+      contacted: 'تم التواصل',
+      closed: 'مكتمل ومغلق'
+    };
     try {
       await updateDoc(doc(db, 'leads', leadId), { status: newStatus });
+      await logActivity('leads', `تغيير حالة طلب العميل "${targetLead?.name || 'طلب'}" إلى: ${statusLabels[newStatus]}`);
     } catch (error) {
       console.warn("Update lead status notice:", error);
     }
   };
 
   const handleConfirmDeleteLead = async (leadId: string) => {
+    const targetLead = leads.find(l => l.id === leadId);
     // 1. Optimistic removal: immediate UI response
     setLeads(prev => prev.filter(l => l.id !== leadId));
     setLeadIdPendingDelete(null);
@@ -312,12 +407,73 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     // 3. Delete from Firestore if exists
     try {
       await deleteDoc(doc(db, 'leads', leadId));
+      await logActivity('leads', `حذف طلب العميل "${targetLead?.name || 'طلب'}" نهائياً`);
     } catch (error) {
       console.warn("Delete lead Firestore notice:", error);
     }
   };
 
-  // Gallery Actions
+  // Gallery Reordering & Actions
+  const handleReorder = async (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= allProjects.length || toIndex >= allProjects.length) return;
+    
+    const reordered = [...allProjects];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+
+    // Optimistically update
+    const batch = writeBatch(db);
+    let firestoreUpdates = 0;
+
+    reordered.forEach((item, index) => {
+      item.order = index;
+      if (item.isFirestore && item.id) {
+        batch.update(doc(db, 'gallery', item.id.toString()), { order: index });
+        firestoreUpdates++;
+      }
+    });
+
+    if (firestoreUpdates > 0) {
+      try {
+        await batch.commit();
+        await logActivity('gallery', `إعادة ترتيب صور المعرض: نقل "${moved.title}" إلى الترتيب #${toIndex + 1}`);
+        showToast("تم تحديث ترتيب صور المعرض بنجاح", "success");
+      } catch (e: any) {
+        console.error("Reorder batch commit error:", e);
+        showToast("تعذر حفظ الترتيب الجديد في السيرفر", "error");
+      }
+    } else {
+      showToast("تم تحديث ترتيب الصور", "success");
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedProjectIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverProjectIndex !== index) {
+      setDragOverProjectIndex(index);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedProjectIndex !== null && draggedProjectIndex !== targetIndex) {
+      await handleReorder(draggedProjectIndex, targetIndex);
+    }
+    setDraggedProjectIndex(null);
+    setDragOverProjectIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedProjectIndex(null);
+    setDragOverProjectIndex(null);
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -383,12 +539,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       }
 
       setUploadStatusText('جاري الحفظ في المعرض...');
+      // Set initial order so new upload appears at the top
+      const minOrder = allProjects.length > 0 ? Math.min(...allProjects.map(p => p.order ?? 0)) : 0;
+      const newOrder = Math.max(0, minOrder <= 0 ? 0 : minOrder - 1);
+
       await addDoc(collection(db, 'gallery'), {
         title: title.trim(),
         category,
         image: finalImageUrl || previewUrl,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        order: newOrder
       });
+
+      await logActivity('gallery', `إضافة مشروع جديد للمعرض: "${title.trim()}" في تصنيف "${category}"`);
 
       setTitle('');
       setSelectedFile(null);
@@ -407,6 +570,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   };
 
   const handleConfirmDeleteGalleryItem = async (id: string | number, isFirestore?: boolean) => {
+    const target = allProjects.find(p => p.id === id);
     setGalleryItemPendingDelete(null);
     if (isFirestore) {
       setFirestoreProjects(prev => prev.filter(p => p.id !== id));
@@ -424,6 +588,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
           deletedAt: new Date()
         });
       }
+      await logActivity('gallery', `حذف مشروع من المعرض: "${target?.title || id}"`);
     } catch (error) {
       console.error("Delete gallery item error:", error);
       showToast("تعذر حذف المشروع من السيرفر", "error");
@@ -570,6 +735,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       } catch (e) {}
 
       setBaSuccessMsg("تم حفظ صور قبل وبعد بنجاح وتم نشرها على كافة الأجهزة والموقع فوراً!");
+      await logActivity('before_after', `تحديث صور مقارنة قبل وبعد: "${cleanTitle}"`);
       showToast("تم حفظ صور قبل وبعد وتحديث الموقع بنجاح!", "success");
     } catch (error: any) {
       console.error("Firestore before/after save error:", error);
@@ -609,6 +775,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
           updatedAt: serverTimestamp()
         }, { merge: true })
       ]);
+      await logActivity('before_after', 'استعادة الصور الافتراضية لقسم قبل وبعد');
       showToast("تمت استعادة الصور الأصلية بنجاح ونشرها!", "success");
     } catch (e: any) {
       console.warn("Reset notice:", e);
@@ -637,11 +804,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     return matchesStatus && matchesSearch;
   });
 
-  // Combined Projects
+  // Combined Projects sorted ascending by order
   const allProjects: Project[] = [
-    ...firestoreProjects,
-    ...PROJECTS.filter(p => !deletedStaticIds.includes(Number(p.id))).map(p => ({ ...p, isFirestore: false }))
-  ];
+    ...firestoreProjects.map((p, idx) => ({
+      ...p,
+      isFirestore: true,
+      order: typeof p.order === 'number' ? p.order : idx
+    })),
+    ...PROJECTS.filter(p => !deletedStaticIds.includes(Number(p.id))).map((p, idx) => ({
+      ...p,
+      isFirestore: false,
+      order: typeof p.order === 'number' ? p.order : (100 + idx)
+    }))
+  ].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   const filteredProjects = galleryCategoryFilter === 'الكل'
     ? allProjects
@@ -810,6 +985,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
 
         {/* Tab Switcher Bar */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex border-t border-slate-800/80 gap-2 overflow-x-auto py-2">
+          {/* Tab 1: Dashboard */}
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`py-2 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'dashboard'
+                ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
+                : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+            }`}
+          >
+            <LayoutDashboard size={16} />
+            <span>الرئيسية</span>
+          </button>
+
+          {/* Tab 2: Leads */}
           <button
             onClick={() => setActiveTab('leads')}
             className={`py-2 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
@@ -829,6 +1018,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
             )}
           </button>
 
+          {/* Tab 3: Gallery */}
           <button
             onClick={() => setActiveTab('gallery')}
             className={`py-2 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
@@ -838,7 +1028,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
             }`}
           >
             <ImagePlus size={16} />
-            <span>معرض المشروعات والأعمال</span>
+            <span>معرض المشروعات</span>
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
               activeTab === 'gallery' ? "bg-slate-950 text-amber-400" : "bg-slate-800 text-slate-400"
             }`}>
@@ -846,6 +1036,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
             </span>
           </button>
 
+          {/* Tab 4: Before & After */}
           <button
             onClick={() => setActiveTab('beforeAfter')}
             className={`py-2 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
@@ -855,7 +1046,27 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
             }`}
           >
             <ArrowLeftRight size={16} />
-            <span>صور قبل وبعد التركيب</span>
+            <span>قبل وبعد</span>
+          </button>
+
+          {/* Tab 5: Activity Log */}
+          <button
+            onClick={() => setActiveTab('activity')}
+            className={`py-2 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'activity'
+                ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
+                : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+            }`}
+          >
+            <History size={16} />
+            <span>سجل النشاط</span>
+            {activities.length > 0 && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'activity' ? "bg-slate-950 text-amber-400" : "bg-slate-800 text-slate-400"
+              }`}>
+                {activities.length}
+              </span>
+            )}
           </button>
         </div>
       </header>
@@ -863,44 +1074,408 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex-1">
         
-        {/* Quick Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-2 font-bold">
-              <span>إجمالي الطلبات</span>
-              <Users size={16} className="text-amber-400" />
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-white">{leads.length}</div>
-            <div className="text-[11px] text-slate-500 mt-1">من طلبات الموقع المباشرة</div>
-          </div>
+        {/* ----------------------------------------------------------------- */}
+        {/* TAB 0: DASHBOARD (HOME) */}
+        {/* ----------------------------------------------------------------- */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-8">
+            {/* Greeting Card */}
+            <div className="bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
+              <div>
+                <span className="text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3.5 py-1.5 rounded-full inline-block mb-3">
+                  لوحة معلومات شركة الأمين المركزية
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-black text-white mb-2">
+                  مرحباً بك في لوحة الإدارة
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-400 max-w-xl leading-relaxed">
+                  متابعة طلبات المعاينة والاستفسارات، إدارة معرض الصور وإعادة ترتيبها بالسحب والإفلات، وتحديث صور قبل وبعد.
+                </p>
+              </div>
 
-          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-4 bg-amber-500/5">
-            <div className="flex items-center justify-between text-amber-400 text-xs mb-2 font-bold">
-              <span>طلبات جديدة بانتظار الرد</span>
-              <Clock size={16} className="text-amber-400" />
+              <div className="flex items-center gap-2 self-stretch sm:self-auto">
+                <button
+                  onClick={() => setActiveTab('gallery')}
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-amber-500/20 flex-1 sm:flex-none"
+                >
+                  <ImagePlus size={16} />
+                  <span>إضافة مشروع جديد</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('leads')}
+                  className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer border border-slate-700 flex-1 sm:flex-none"
+                >
+                  <Users size={16} />
+                  <span>عرض الطلبات</span>
+                </button>
+              </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-amber-400">{newLeadsCount}</div>
-            <div className="text-[11px] text-amber-400/80 mt-1">تحتاج متابعة هاتفية أو واتساب</div>
-          </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-2 font-bold">
-              <span>مشروعات المعرض</span>
-              <ImagePlus size={16} className="text-blue-400" />
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-white">{allProjects.length}</div>
-            <div className="text-[11px] text-slate-500 mt-1">معروضة للزوار بالفلترة</div>
-          </div>
+            {/* Stat Cards Grid (6 Metric Cards as Requested) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              
+              {/* Stat 1: NEW LEADS (PROMINENT HIGHLIGHT) */}
+              <div className="bg-gradient-to-br from-amber-500/20 via-amber-500/5 to-slate-900 border-2 border-amber-500/50 rounded-3xl p-6 shadow-xl shadow-amber-500/10 flex flex-col justify-between relative overflow-hidden group">
+                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600"></div>
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-black text-amber-300 uppercase tracking-wider flex items-center gap-2 bg-amber-500/20 border border-amber-500/40 px-3 py-1 rounded-full">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                      طلبات جديدة بانتظار الرد
+                    </span>
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                      <Clock size={20} />
+                    </div>
+                  </div>
+                  <div className="text-4xl sm:text-5xl font-black text-white mb-2">{newLeadsCount}</div>
+                  <p className="text-xs text-amber-200/80 leading-relaxed">
+                    {newLeadsCount > 0 
+                      ? "تحتاج تواصل ومتابعة سريعة هاتفياً أو عبر واتساب مع العملاء."
+                      : "لا توجد طلبات جديدة حالياً، تم الرد على كافة الطلبات بنجاح."}
+                  </p>
+                </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-2 font-bold">
-              <span>مقارنة قبل وبعد</span>
-              <Sparkles size={16} className="text-emerald-400" />
+                <div className="mt-6 pt-4 border-t border-amber-500/20 flex items-center justify-between">
+                  <button
+                    onClick={() => {
+                      setLeadStatusFilter('new');
+                      setActiveTab('leads');
+                    }}
+                    className="text-xs font-black text-amber-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <span>عرض الطلبات الجديدة مباشرة</span>
+                    <ArrowLeftRight size={13} />
+                  </button>
+                  <span className="text-[11px] font-bold text-amber-400/80 bg-amber-950/60 px-2 py-0.5 rounded-lg border border-amber-500/30">
+                    أولوية قصوى
+                  </span>
+                </div>
+              </div>
+
+              {/* Stat 2: TOTAL LEADS */}
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-bold text-slate-400">إجمالي طلبات العملاء</span>
+                    <div className="w-10 h-10 rounded-2xl bg-slate-800 text-amber-400 flex items-center justify-center border border-slate-700">
+                      <Users size={20} />
+                    </div>
+                  </div>
+                  <div className="text-3xl sm:text-4xl font-black text-white mb-2">{leads.length}</div>
+                  <p className="text-xs text-slate-500">
+                    كافة استفسارات وطلبات المعاينة التي تم إرسالها من نموذج الموقع.
+                  </p>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between">
+                  <button
+                    onClick={() => {
+                      setLeadStatusFilter('all');
+                      setActiveTab('leads');
+                    }}
+                    className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <span>فتح جدول الطلبات</span>
+                    <ArrowUpRight size={14} />
+                  </button>
+                  <span className="text-[11px] text-slate-400 font-mono">100% محفوظة</span>
+                </div>
+              </div>
+
+              {/* Stat 3: CONTACTED LEADS */}
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-bold text-slate-400">تم التواصل معهم</span>
+                    <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/20">
+                      <Phone size={20} />
+                    </div>
+                  </div>
+                  <div className="text-3xl sm:text-4xl font-black text-white mb-2">
+                    {leads.filter(l => l.status === 'contacted').length}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    عملاء تم الاتصال بهم أو إرسال مقايسات وتفاصيل عبر واتساب.
+                  </p>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between">
+                  <button
+                    onClick={() => {
+                      setLeadStatusFilter('contacted');
+                      setActiveTab('leads');
+                    }}
+                    className="text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <span>استعراض المتواصل معهم</span>
+                    <ArrowUpRight size={14} />
+                  </button>
+                  <span className="text-[11px] text-slate-500 font-bold">قيد المتابعة</span>
+                </div>
+              </div>
+
+              {/* Stat 4: CLOSED LEADS */}
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-bold text-slate-400">طلبات مكتملة ومغلقة</span>
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+                      <CheckCircle2 size={20} />
+                    </div>
+                  </div>
+                  <div className="text-3xl sm:text-4xl font-black text-white mb-2">
+                    {leads.filter(l => l.status === 'closed').length}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    طلبات تم الاتفاق عليها أو إتمام المعاينة والتنفيذ بنجاح.
+                  </p>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between">
+                  <button
+                    onClick={() => {
+                      setLeadStatusFilter('closed');
+                      setActiveTab('leads');
+                    }}
+                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <span>استعراض الطلبات المكتملة</span>
+                    <ArrowUpRight size={14} />
+                  </button>
+                  <span className="text-[11px] text-slate-500 font-bold">مكتمل</span>
+                </div>
+              </div>
+
+              {/* Stat 5: GALLERY IMAGES */}
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-bold text-slate-400">صور المعرض الحالية</span>
+                    <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20">
+                      <ImagePlus size={20} />
+                    </div>
+                  </div>
+                  <div className="text-3xl sm:text-4xl font-black text-white mb-2">{allProjects.length}</div>
+                  <p className="text-xs text-slate-500">
+                    منها {firestoreProjects.length} صورة مرفوعة حديثاً من اللوحة بترتيب مخصص.
+                  </p>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between">
+                  <button
+                    onClick={() => setActiveTab('gallery')}
+                    className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <span>إعادة ترتيب المعرض بالسحب</span>
+                    <ArrowUpRight size={14} />
+                  </button>
+                  <span className="text-[11px] text-slate-400 font-mono">سحب وإفلات</span>
+                </div>
+              </div>
+
+              {/* Stat 6: BEFORE AND AFTER */}
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-bold text-slate-400">مقارنة قبل وبعد</span>
+                    <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center border border-cyan-500/20">
+                      <ArrowLeftRight size={20} />
+                    </div>
+                  </div>
+                  <div className="text-3xl sm:text-4xl font-black text-white mb-2">{BEFORE_AFTER_ITEMS.length}</div>
+                  <p className="text-xs text-slate-400 truncate font-semibold" title={baTitle}>
+                    {baTitle}
+                  </p>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between">
+                  <button
+                    onClick={() => setActiveTab('beforeAfter')}
+                    className="text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <span>تعديل صور السلايدر</span>
+                    <ArrowUpRight size={14} />
+                  </button>
+                  <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    نشط بالموقع
+                  </span>
+                </div>
+              </div>
+
             </div>
-            <div className="text-base sm:text-lg font-black text-emerald-400 mt-1">نشط ومحدث</div>
-            <div className="text-[11px] text-slate-500 mt-1 truncate">{baTitle}</div>
+
+            {/* Section: LAST 5 LEADS (As specifically requested) */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+                    <Clock size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-lg text-white">آخر 5 طلبات وصلت للموقع</h3>
+                    <p className="text-xs text-slate-400">وصول مباشر وفوري لأحدث طلبات المعاينة والاستفسارات الواردة.</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setActiveTab('leads')}
+                  className="bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700"
+                >
+                  <span>عرض كافة الطلبات ({leads.length})</span>
+                  <ArrowRight size={14} />
+                </button>
+              </div>
+
+              {leads.length === 0 ? (
+                <div className="py-12 text-center">
+                  <Users size={36} className="text-slate-600 mx-auto mb-2" />
+                  <p className="text-sm font-bold text-slate-400">لا توجد طلبات واردة حتى الآن</p>
+                  <p className="text-xs text-slate-500 mt-1">ستظهر هنا تلقائياً عند إرسال أي عميل لطلب معاينة من نموذج الاتصال بالموقع.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {leads.slice(0, 5).map((lead, idx) => {
+                    const waText = `أهلاً بك أستاذ ${lead.name}، شركة الأمين للبرجولات تتشرف بالتواصل معك بخصوص طلبك (${lead.service}).`;
+                    const waLink = `https://wa.me/${lead.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(waText)}`;
+
+                    return (
+                      <div
+                        key={lead.id || idx}
+                        className="bg-slate-950/70 border border-slate-800/80 hover:border-slate-700 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all"
+                      >
+                        {/* Lead Info */}
+                        <div className="flex items-center gap-3.5">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black ${
+                            lead.status === 'new'
+                              ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                              : lead.status === 'contacted'
+                              ? "bg-blue-500/20 text-blue-400 border border-blue-500/40"
+                              : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                          }`}>
+                            #{idx + 1}
+                          </div>
+
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-black text-sm text-white">{lead.name}</h4>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                                lead.status === 'new'
+                                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                                  : lead.status === 'contacted'
+                                  ? "bg-blue-500/20 text-blue-400 border border-blue-500/40"
+                                  : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                              }`}>
+                                {lead.status === 'new' ? 'جديد' : lead.status === 'contacted' ? 'تم التواصل' : 'مغلق'}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-slate-400">
+                              <span className="text-amber-400 font-bold">{lead.service || "برجولة خشبية"}</span>
+                              <span className="font-mono text-slate-300" dir="ltr">{lead.phone}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Date and Quick Action */}
+                        <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end pt-2 md:pt-0 border-t md:border-t-0 border-slate-800">
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                            <Calendar size={13} />
+                            <span>
+                              {lead.createdAt?.toDate 
+                                ? lead.createdAt.toDate().toLocaleString('ar-EG') 
+                                : typeof lead.createdAt === 'string' 
+                                ? new Date(lead.createdAt).toLocaleString('ar-EG')
+                                : 'الآن'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={waLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-emerald-600/80 hover:bg-emerald-600 text-white p-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+                              title="رد عبر واتساب"
+                            >
+                              <MessageCircle size={14} />
+                            </a>
+
+                            <button
+                              onClick={() => {
+                                setLeadSearch(lead.phone || lead.name);
+                                setActiveTab('leads');
+                              }}
+                              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                            >
+                              <span>عرض التفاصيل</span>
+                              <ArrowLeftRight size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Quick Action Hub */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div 
+                onClick={() => setActiveTab('gallery')}
+                className="bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-2xl p-5 cursor-pointer transition-all hover:bg-slate-850 group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                    <ListOrdered size={18} />
+                  </div>
+                  <h4 className="font-bold text-sm text-white group-hover:text-amber-400 transition-colors">
+                    ترتيب صور المعرض
+                  </h4>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  اسحب الصور وأفلتها لتحديد الترتيب الدقيق الذي يظهر للزوار في الصفحة الرئيسية.
+                </p>
+              </div>
+
+              <div 
+                onClick={() => setActiveTab('beforeAfter')}
+                className="bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-2xl p-5 cursor-pointer transition-all hover:bg-slate-850 group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center">
+                    <ArrowLeftRight size={18} />
+                  </div>
+                  <h4 className="font-bold text-sm text-white group-hover:text-amber-400 transition-colors">
+                    إدارة قبل وبعد
+                  </h4>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  رفع صور المكان قبل التركيب وبعد الانتهاء لتوضيح جودة وفخامة التنفيذ للعملاء.
+                </p>
+              </div>
+
+              <div 
+                onClick={() => setActiveTab('activity')}
+                className="bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-2xl p-5 cursor-pointer transition-all hover:bg-slate-850 group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+                    <History size={18} />
+                  </div>
+                  <h4 className="font-bold text-sm text-white group-hover:text-amber-400 transition-colors">
+                    سجل النشاط والعمليات
+                  </h4>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  استعراض جميع التعديلات السابقة المنفذة على الطلبات، المعرض، والمقارنات.
+                </p>
+              </div>
+            </div>
+
           </div>
-        </div>
+        )}
 
         {/* ----------------------------------------------------------------- */}
         {/* TAB 1: LEADS MANAGEMENT */}
@@ -1230,7 +1805,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="font-black text-lg text-white">المشروعات الحالية بالمعرض ({filteredProjects.length})</h3>
-                  <p className="text-xs text-slate-400">يمكنك حذف أي صورة ترغب بإزالتها من المعرض بنقرة واحدة.</p>
+                  <p className="text-xs text-slate-400">يمكنك سحب وإفلات الصور لإعادة ترتيبها فوراً كما تظهر للزوار في المعرض العام.</p>
                 </div>
 
                 {/* Category Filter */}
@@ -1251,63 +1826,145 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                 </div>
               </div>
 
-              {/* Projects Grid */}
+              {/* Drag and Drop instructions banner */}
+              <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5 text-amber-400 font-bold">
+                  <ListOrdered size={18} className="shrink-0" />
+                  <span>ميزة إعادة الترتيب (Drag & Drop):</span>
+                  <span className="text-slate-300 font-normal">
+                    اسحب أي كرت وأفلته في المكان المطلوب أو استخدم أزرار الأسهم، ويتم حفظ الترتيب تلقائياً في السيرفر وظهوره للزوار.
+                  </span>
+                </div>
+                {galleryCategoryFilter !== 'الكل' && (
+                  <span className="text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-1 rounded-xl text-[11px] font-bold shrink-0">
+                    لإعادة الترتيب الشامل، اختر تصنيف "الكل"
+                  </span>
+                )}
+              </div>
+
+              {/* Projects Grid with Drag & Drop and Move buttons */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {filteredProjects.map((project) => (
-                  <div
-                    key={project.id}
-                    className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden group flex flex-col justify-between"
-                  >
-                    <div className="relative aspect-[4/3] bg-slate-950 overflow-hidden">
-                      <img
-                        src={project.image}
-                        alt={project.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                      />
-                      <span className="absolute top-2 right-2 bg-slate-950/80 backdrop-blur-md text-[10px] font-bold text-amber-400 px-2.5 py-1 rounded-lg">
-                        {project.category}
-                      </span>
-                    </div>
+                {filteredProjects.map((project, index) => {
+                  const isCurrentFilterAll = galleryCategoryFilter === 'الكل';
+                  const isBeingDragged = draggedProjectIndex === index;
+                  const isDragOver = dragOverProjectIndex === index;
 
-                    <div className="p-3.5 space-y-3 flex-1 flex flex-col justify-between">
-                      <p className="text-xs font-bold text-slate-200 line-clamp-2 leading-relaxed">
-                        {project.title}
-                      </p>
+                  return (
+                    <div
+                      key={project.id}
+                      draggable={isCurrentFilterAll}
+                      onDragStart={(e) => handleDragStart(e, index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDrop={(e) => handleDrop(e, index)}
+                      onDragEnd={handleDragEnd}
+                      className={`bg-slate-900 border rounded-2xl overflow-hidden group flex flex-col justify-between transition-all duration-200 select-none ${
+                        isBeingDragged 
+                          ? 'opacity-40 border-dashed border-amber-500 scale-95' 
+                          : isDragOver
+                          ? 'border-amber-400 ring-2 ring-amber-400/40'
+                          : 'border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="relative aspect-[4/3] bg-slate-950 overflow-hidden">
+                        <img
+                          src={project.image}
+                          alt={project.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 pointer-events-none"
+                          loading="lazy"
+                        />
 
-                      {galleryItemPendingDelete === project.id ? (
-                        <div className="bg-red-950/90 border border-red-800/80 rounded-xl p-2.5 flex flex-col gap-2">
-                          <span className="text-[11px] text-red-200 font-bold text-center">تأكيد حذف هذا المشروع؟</span>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleConfirmDeleteGalleryItem(project.id, project.isFirestore)}
-                              className="bg-red-600 hover:bg-red-500 active:bg-red-700 text-white py-1.5 px-2 rounded-lg text-[11px] font-bold flex-1 cursor-pointer"
-                            >
-                              نعم، احذف
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setGalleryItemPendingDelete(null)}
-                              className="bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-2 rounded-lg text-[11px] font-bold flex-1 cursor-pointer"
-                            >
-                              إلغاء
-                            </button>
-                          </div>
+                        {/* Top Badges: Order & Category */}
+                        <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                          <span className="bg-slate-950/90 backdrop-blur-md text-[10px] font-black text-amber-400 px-2 py-0.5 rounded-lg border border-amber-500/30">
+                            #{index + 1}
+                          </span>
+                          <span className="bg-slate-950/80 backdrop-blur-md text-[10px] font-bold text-slate-300 px-2 py-0.5 rounded-lg">
+                            {project.category}
+                          </span>
                         </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setGalleryItemPendingDelete(project.id)}
-                          className="w-full bg-red-950/40 hover:bg-red-900/60 border border-red-900/50 text-red-300 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <Trash2 size={13} />
-                          <span>حذف من المعرض</span>
-                        </button>
-                      )}
+
+                        {/* Drag Handle Indicator */}
+                        {isCurrentFilterAll && (
+                          <div 
+                            className="absolute top-2 left-2 bg-slate-950/80 backdrop-blur-md text-amber-400 p-1.5 rounded-lg cursor-grab active:cursor-grabbing hover:bg-amber-500 hover:text-slate-950 transition-colors shadow-md"
+                            title="اسحب من هنا لتغيير الترتيب"
+                          >
+                            <GripVertical size={14} />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-3.5 space-y-3 flex-1 flex flex-col justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-slate-200 line-clamp-2 leading-relaxed">
+                            {project.title}
+                          </p>
+                          <span className="text-[10px] text-slate-500 mt-1 block">
+                            {project.isFirestore ? "مشروع مرفوع مخصص" : "صورة افتراضية"}
+                          </span>
+                        </div>
+
+                        {/* Order Control Arrows */}
+                        {isCurrentFilterAll && (
+                          <div className="flex items-center justify-between bg-slate-950/60 p-1.5 rounded-xl border border-slate-800/80 text-[11px]">
+                            <span className="text-slate-400 font-bold px-1 text-[10px]">الترتيب:</span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={index === 0}
+                                onClick={() => handleReorder(index, index - 1)}
+                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 disabled:opacity-20 disabled:hover:bg-slate-800 disabled:hover:text-slate-400 text-slate-300 transition-colors cursor-pointer"
+                                title="تقديم للأمام"
+                              >
+                                <ChevronUp size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={index === filteredProjects.length - 1}
+                                onClick={() => handleReorder(index, index + 1)}
+                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 disabled:opacity-20 disabled:hover:bg-slate-800 disabled:hover:text-slate-400 text-slate-300 transition-colors cursor-pointer"
+                                title="تأخير للخلف"
+                              >
+                                <ChevronDown size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {galleryItemPendingDelete === project.id ? (
+                          <div className="bg-red-950/90 border border-red-800/80 rounded-xl p-2.5 flex flex-col gap-2">
+                            <span className="text-[11px] text-red-200 font-bold text-center">تأكيد حذف هذا المشروع؟</span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleConfirmDeleteGalleryItem(project.id, project.isFirestore)}
+                                className="bg-red-600 hover:bg-red-500 active:bg-red-700 text-white py-1.5 px-2 rounded-lg text-[11px] font-bold flex-1 cursor-pointer"
+                              >
+                                نعم، احذف
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setGalleryItemPendingDelete(null)}
+                                className="bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-2 rounded-lg text-[11px] font-bold flex-1 cursor-pointer"
+                              >
+                                إلغاء
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setGalleryItemPendingDelete(project.id)}
+                            className="w-full bg-red-950/40 hover:bg-red-900/60 border border-red-900/50 text-red-300 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Trash2 size={13} />
+                            <span>حذف من المعرض</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -1519,6 +2176,223 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
               </div>
             </div>
 
+          </div>
+        )}
+
+        {/* ----------------------------------------------------------------- */}
+        {/* TAB 4: ACTIVITY LOG */}
+        {/* ----------------------------------------------------------------- */}
+        {activeTab === 'activity' && (
+          <div className="space-y-6">
+            {/* Header & Filter Toolbar */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <History size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-white">سجل العمليات والنشاط (Activity Log)</h3>
+                  <p className="text-xs text-slate-400">سجل تلقائي ومؤرخ لجميع التعديلات والعمليات المنفذة في لوحة التحكم.</p>
+                </div>
+              </div>
+
+              {/* Filter Pills and Clear All Action */}
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                <div className="flex gap-1.5 overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => setActivityFilter('all')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                      activityFilter === 'all'
+                        ? "bg-amber-500 text-slate-950"
+                        : "bg-slate-950 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    الكل ({activities.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivityFilter('leads')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                      activityFilter === 'leads'
+                        ? "bg-amber-500 text-slate-950"
+                        : "bg-slate-950 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    الطلبات ({activities.filter(a => a.type === 'leads').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivityFilter('gallery')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                      activityFilter === 'gallery'
+                        ? "bg-amber-500 text-slate-950"
+                        : "bg-slate-950 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    المعرض ({activities.filter(a => a.type === 'gallery').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivityFilter('before_after')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                      activityFilter === 'before_after'
+                        ? "bg-amber-500 text-slate-950"
+                        : "bg-slate-950 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    قبل وبعد ({activities.filter(a => a.type === 'before_after').length})
+                  </button>
+                </div>
+
+                {/* Clear All Logs Button */}
+                {activities.length > 0 && (
+                  showClearAllActivitiesConfirm ? (
+                    <div className="bg-red-950/80 border border-red-800/80 rounded-xl p-1.5 px-3 flex items-center gap-2">
+                      <span className="text-[11px] text-red-200 font-bold">مسح السجل بالكامل؟</span>
+                      <button
+                        type="button"
+                        onClick={handleClearAllActivities}
+                        disabled={isDeletingActivity}
+                        className="bg-red-600 hover:bg-red-500 text-white px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                      >
+                        نعم
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowClearAllActivitiesConfirm(false)}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                      >
+                        إلغاء
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowClearAllActivitiesConfirm(true)}
+                      className="bg-red-950/40 hover:bg-red-900/60 border border-red-900/40 hover:border-red-600/60 text-red-300 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                      title="مسح كافة سجلات النشاط"
+                    >
+                      <Trash2 size={13} />
+                      <span>مسح الكل</span>
+                    </button>
+                  )
+                )}
+              </div>
+            </div>
+
+            {/* Activities List */}
+            {activities.filter(a => activityFilter === 'all' || a.type === activityFilter).length === 0 ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center">
+                <History size={40} className="text-slate-600 mx-auto mb-3" />
+                <h4 className="text-base font-bold text-slate-300 mb-1">لا توجد عمليات مسجلة حالياً</h4>
+                <p className="text-xs text-slate-500">
+                  {activityFilter !== 'all' 
+                    ? "لا توجد عمليات مسجلة في هذا التصنيف حالياً."
+                    : "تم مسح كافة السجلات، أو لم تُنفَّذ أي عمليات جديدة بعد."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {activities
+                  .filter(a => activityFilter === 'all' || a.type === activityFilter)
+                  .map((act) => {
+                    const isLeads = act.type === 'leads';
+                    const isGallery = act.type === 'gallery';
+                    const isBA = act.type === 'before_after';
+
+                    const typeName = isLeads ? 'طلبات العملاء' : isGallery ? 'معرض الصور' : 'قبل وبعد';
+
+                    return (
+                      <div
+                        key={act.id}
+                        className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl p-4 transition-colors"
+                      >
+                        {activityPendingDelete === act.id ? (
+                          <div className="bg-red-950/80 border border-red-800/80 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+                            <span className="text-xs text-red-200 font-bold flex items-center gap-1.5">
+                              <AlertCircle size={15} className="text-red-400 shrink-0" />
+                              <span>تأكيد حذف هذا السجل نهائياً؟</span>
+                            </span>
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteActivity(act.id)}
+                                className="bg-red-600 hover:bg-red-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex-1 sm:flex-none"
+                              >
+                                نعم، احذف
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setActivityPendingDelete(null)}
+                                className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex-1 sm:flex-none"
+                              >
+                                إلغاء
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5">
+                            <div className="flex items-center gap-3.5">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                isLeads 
+                                  ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                  : isGallery
+                                  ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                                  : "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
+                              }`}>
+                                {isLeads && <Users size={18} />}
+                                {isGallery && <ImagePlus size={18} />}
+                                {isBA && <ArrowLeftRight size={18} />}
+                              </div>
+
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                                    isLeads
+                                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                      : isGallery
+                                      ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                                      : "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+                                  }`}>
+                                    {typeName}
+                                  </span>
+                                </div>
+                                <p className="text-xs sm:text-sm font-bold text-slate-200 leading-relaxed">
+                                  {act.description}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Timestamp & Delete button */}
+                            <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
+                              <div className="text-[11px] text-slate-400 flex items-center gap-1.5 bg-slate-950/70 border border-slate-800/80 px-3 py-1.5 rounded-xl font-mono">
+                                <Clock size={12} className="text-amber-400" />
+                                <span>
+                                  {act.createdAt?.toDate 
+                                    ? act.createdAt.toDate().toLocaleString('ar-EG') 
+                                    : typeof act.createdAt === 'string'
+                                    ? new Date(act.createdAt).toLocaleString('ar-EG')
+                                    : 'الآن'}
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setActivityPendingDelete(act.id || null)}
+                                className="bg-red-950/40 hover:bg-red-900/60 border border-red-900/40 hover:border-red-600/60 text-red-400 p-2 rounded-xl transition-all cursor-pointer"
+                                title="حذف هذا السجل"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
           </div>
         )}
 

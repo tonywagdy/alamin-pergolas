@@ -20,9 +20,34 @@
         "createdAt": {
           "type": "timestamp",
           "description": "The time the image was added"
+        },
+        "order": {
+          "type": "number",
+          "description": "Custom sorting order of the gallery item"
         }
       },
       "required": ["title", "category", "image", "createdAt"]
+    },
+    "ActivityLog": {
+      "title": "Activity Log",
+      "description": "Audit log of actions performed in the admin portal",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Category of activity: leads, gallery, before_after",
+          "enum": ["leads", "gallery", "before_after"]
+        },
+        "description": {
+          "type": "string",
+          "description": "Short explanation of the activity executed"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "Server timestamp of the action"
+        }
+      },
+      "required": ["type", "description", "createdAt"]
     },
     "DeletedStaticImage": {
       "title": "Deleted Static Image",
@@ -114,6 +139,10 @@
     "/leads/{leadId}": {
       "schema": "Lead",
       "description": "Collection of customer contact leads"
+    },
+    "/activity_log/{logId}": {
+      "schema": "ActivityLog",
+      "description": "Collection of administrative activity logs"
     }
   }
 }

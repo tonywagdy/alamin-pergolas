@@ -1,5 +1,5 @@
 import React from 'react';
-import { Project, Testimonial, BeforeAfterItem, WorkStep, FAQItem } from './types';
+import { Project, BeforeAfterItem, WorkStep, FAQItem } from './types';
 
 // Phone configurations
 export const PHONE_NUMBER_INTL = "201017919385";
@@ -24,30 +24,30 @@ export const trackGAEvent = (eventName: string, params?: Record<string, any>) =>
   }
 };
 
-// Initial projects catalogue using optimized WebP images
+// Initial projects catalogue using optimized WebP images with default order
 export const PROJECTS: Project[] = [
-  { id: 0, title: "برجولة خشبية مودرن بإضاءة مخفية", category: "برجولات حدائق", image: "./input_file_0.webp" },
-  { id: 1, title: "برجولة روف فخمة خشب عزيزي", category: "برجولات روف", image: "./input_file_1.webp" },
-  { id: 2, title: "جلسة روف بتصميم هندسي مائل", category: "برجولات روف", image: "./input_file_2.webp" },
-  { id: 3, title: "برجولة حديقة متكاملة بإضاءة ليلية", category: "برجولات حدائق", image: "./input_file_3.webp" },
-  { id: 4, title: "جلسة خارجية مريحة مع سقف شرائح", category: "برجولات حدائق", image: "./input_file_4.webp" },
-  { id: 5, title: "روف مفتوح بإطلالة بانورامية", category: "برجولات روف", image: "./input_file_5.webp" },
-  { id: 6, title: "برجولة كلاسيك خشب موسكي معالج", category: "برجولات حدائق", image: "./input_file_6.webp" },
-  { id: 7, title: "ديكورات وتجاليد خشبية داخلية وخارجية", category: "ديكورات خشبية", image: "./input_file_7.webp" },
-  { id: 8, title: "برجولة مدمجة حديد مع تكسيات خشب", category: "برجولات حدائق", image: "./input_file_8.webp" },
-  { id: 9, title: "تصميم روف متكامل مع مقاعد خشبية", category: "برجولات روف", image: "./input_file_9.webp" },
-  { id: 10, title: "برجولة حديقة عائلية واسعة", category: "برجولات حدائق", image: "./input_file_10.webp" },
-  { id: 11, title: "أسقف خشبية معلقة وديكورات معمارية", category: "أسقف ديكورية", image: "./input_file_11.webp" },
-  { id: 12, title: "روف فيلا فاخر مع حماية من الشمس", category: "برجولات روف", image: "./input_file_12.webp" },
-  { id: 13, title: "برجولة هرمية بتفاصيل فنية دقيقة", category: "برجولات حدائق", image: "./input_file_13.webp" },
-  { id: 14, title: "جلسة روف هادئة مع بارتشن جانبي", category: "برجولات روف", image: "./input_file_14.webp" },
-  { id: 15, title: "برجولة سداسية بتصميم تركي مميز", category: "برجولات حدائق", image: "./input_file_15.webp" },
-  { id: 16, title: "أبواب وبوابات خشبية فخمة للفلل", category: "أعمال خشبية", image: "./input_file_16.webp" },
-  { id: 17, title: "برجولة روف مغلقة بزجاج وأخشاب", category: "برجولات روف", image: "./input_file_17.webp" },
-  { id: 18, title: "جلسة حديقة كلاسيكية مريحة", category: "برجولات حدائق", image: "./input_file_18.webp" },
-  { id: 19, title: "برجولة ثمانية ملوكية للقصور والفلل", category: "برجولات حدائق", image: "./input_file_19.webp" },
-  { id: 20, title: "تجليد حوائط وديكورات جدارية خشبية", category: "ديكورات خشبية", image: "./input_file_20.webp" },
-  { id: 22, title: "أرجوحة خشبية متينة للحدائق", category: "أعمال خشبية", image: "./input_file_22.webp" },
+  { id: 0, title: "برجولة خشبية مودرن بإضاءة مخفية", category: "برجولات حدائق", image: "./input_file_0.webp", order: 100 },
+  { id: 1, title: "برجولة روف فخمة خشب عزيزي", category: "برجولات روف", image: "./input_file_1.webp", order: 101 },
+  { id: 2, title: "جلسة روف بتصميم هندسي مائل", category: "برجولات روف", image: "./input_file_2.webp", order: 102 },
+  { id: 3, title: "برجولة حديقة متكاملة بإضاءة ليلية", category: "برجولات حدائق", image: "./input_file_3.webp", order: 103 },
+  { id: 4, title: "جلسة خارجية مريحة مع سقف شرائح", category: "برجولات حدائق", image: "./input_file_4.webp", order: 104 },
+  { id: 5, title: "روف مفتوح بإطلالة بانورامية", category: "برجولات روف", image: "./input_file_5.webp", order: 105 },
+  { id: 6, title: "برجولة كلاسيك خشب موسكي معالج", category: "برجولات حدائق", image: "./input_file_6.webp", order: 106 },
+  { id: 7, title: "ديكورات وتجاليد خشبية داخلية وخارجية", category: "ديكورات خشبية", image: "./input_file_7.webp", order: 107 },
+  { id: 8, title: "برجولة مدمجة حديد مع تكسيات خشب", category: "برجولات حدائق", image: "./input_file_8.webp", order: 108 },
+  { id: 9, title: "تصميم روف متكامل مع مقاعد خشبية", category: "برجولات روف", image: "./input_file_9.webp", order: 109 },
+  { id: 10, title: "برجولة حديقة عائلية واسعة", category: "برجولات حدائق", image: "./input_file_10.webp", order: 110 },
+  { id: 11, title: "أسقف خشبية معلقة وديكورات معمارية", category: "أسقف ديكورية", image: "./input_file_11.webp", order: 111 },
+  { id: 12, title: "روف فيلا فاخر مع حماية من الشمس", category: "برجولات روف", image: "./input_file_12.webp", order: 112 },
+  { id: 13, title: "برجولة هرمية بتفاصيل فنية دقيقة", category: "برجولات حدائق", image: "./input_file_13.webp", order: 113 },
+  { id: 14, title: "جلسة روف هادئة مع بارتشن جانبي", category: "برجولات روف", image: "./input_file_14.webp", order: 114 },
+  { id: 15, title: "برجولة سداسية بتصميم تركي مميز", category: "برجولات حدائق", image: "./input_file_15.webp", order: 115 },
+  { id: 16, title: "أبواب وبوابات خشبية فخمة للفلل", category: "أعمال خشبية", image: "./input_file_16.webp", order: 116 },
+  { id: 17, title: "برجولة روف مغلقة بزجاج وأخشاب", category: "برجولات روف", image: "./input_file_17.webp", order: 117 },
+  { id: 18, title: "جلسة حديقة كلاسيكية مريحة", category: "برجولات حدائق", image: "./input_file_18.webp", order: 118 },
+  { id: 19, title: "برجولة ثمانية ملوكية للقصور والفلل", category: "برجولات حدائق", image: "./input_file_19.webp", order: 119 },
+  { id: 20, title: "تجليد حوائط وديكورات جدارية خشبية", category: "ديكورات خشبية", image: "./input_file_20.webp", order: 120 },
+  { id: 22, title: "أرجوحة خشبية متينة للحدائق", category: "أعمال خشبية", image: "./input_file_22.webp", order: 121 },
 ];
 
 // Before and after comparisons
@@ -67,42 +67,6 @@ export const BEFORE_AFTER_ITEMS: BeforeAfterItem[] = [
     beforeImage: "./input_file_4.webp",
     afterImage: "./input_file_0.webp",
     location: "الشيخ زايد"
-  }
-];
-
-// Verified customer testimonials
-export const TESTIMONIALS: Testimonial[] = [
-  {
-    id: 1,
-    name: "م. أحمد الشناوي",
-    location: "الشيخ زايد",
-    rating: 5,
-    service: "برجولة روف خشب عزيزي",
-    review: "شغل احترافي على أعلى مستوى، فريق شركة الأمين ناس محترمة جداً، التزام تام بالوقت والمقاسات بالمليمتر، والخشب نوعيته ممتازة عازل للمطر والشمس."
-  },
-  {
-    id: 2,
-    name: "د. طارق مراد",
-    location: "التجمع الخامس",
-    rating: 5,
-    service: "برجولة حديقة وسقف ديكوري",
-    review: "سعدت جداً بالتعامل معكم. دقة في التنفيذ وتشطيب نظيف وراقي، والسعر كان أفضل من شركات كتير قدمت لي عروض أسعار. أنصح بالتعامل معهم بشدة."
-  },
-  {
-    id: 3,
-    name: "أ/ محمود عبد الرحمن",
-    location: "المعادي",
-    rating: 5,
-    service: "تجليد حوائط وبرجولة خشبية",
-    review: "ما شاء الله دقة وأمانة زي اسم الشركة تماماً. البرجولة بقالها عندي سنتين في الشمس والحر وشكلها كأنها لسه متركبة إمبارح."
-  },
-  {
-    id: 4,
-    name: "م/ سارة الجندي",
-    location: "6 أكتوبر",
-    rating: 5,
-    service: "برجولة روف مودرن بإضاءة",
-    review: "التصميم طلع أجمل من الصورة اللي كنت عاوزاها، والأهم إن التركيب خلص في يوم واحد بدون أي فوضى في المكان. شكراً لفريق الأمين."
   }
 ];
 

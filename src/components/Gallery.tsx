@@ -28,13 +28,17 @@ export const Gallery: React.FC = () => {
       setIsAdmin(user?.email === 'twagdy067@gmail.com');
     });
 
-    const q = query(collection(db, 'gallery'), orderBy('createdAt', 'desc'));
+    const q = collection(db, 'gallery');
     const unsubscribeDb = onSnapshot(q, (snapshot) => {
-      const items: Project[] = snapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...(docSnap.data() as any),
-        isFirestore: true
-      }));
+      const items: Project[] = snapshot.docs.map(docSnap => {
+        const data = docSnap.data() as any;
+        return {
+          id: docSnap.id,
+          ...data,
+          isFirestore: true,
+          order: typeof data.order === 'number' ? data.order : undefined
+        };
+      });
       setFirestoreProjects(items);
     }, (error) => {
       console.warn("Firestore gallery snapshot notice:", error);
@@ -75,9 +79,17 @@ export const Gallery: React.FC = () => {
   };
 
   const allProjects: Project[] = [
-    ...firestoreProjects,
-    ...PROJECTS.filter(p => !deletedStaticIds.includes(Number(p.id))).map(p => ({ ...p, isFirestore: false }))
-  ];
+    ...firestoreProjects.map((p, idx) => ({
+      ...p,
+      isFirestore: true,
+      order: typeof p.order === 'number' ? p.order : idx
+    })),
+    ...PROJECTS.filter(p => !deletedStaticIds.includes(Number(p.id))).map((p, idx) => ({
+      ...p,
+      isFirestore: false,
+      order: typeof p.order === 'number' ? p.order : (100 + idx)
+    }))
+  ].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   const filteredProjects = selectedCategory === "الكل"
     ? allProjects

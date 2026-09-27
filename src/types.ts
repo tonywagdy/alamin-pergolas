@@ -15,6 +15,7 @@ export interface Project {
   image: string;
   isFirestore?: boolean;
   createdAt?: any;
+  order?: number;
 }
 
 export interface Lead {
@@ -27,13 +28,11 @@ export interface Lead {
   status: 'new' | 'contacted' | 'closed';
 }
 
-export interface Testimonial {
-  id: number;
-  name: string;
-  location: string;
-  rating: number;
-  review: string;
-  service: string;
+export interface ActivityLogItem {
+  id?: string;
+  type: 'leads' | 'gallery' | 'before_after';
+  description: string;
+  createdAt: any;
 }
 
 export interface BeforeAfterItem {
