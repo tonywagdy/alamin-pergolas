@@ -17,8 +17,22 @@ const CATEGORIES = [
 ];
 
 export const Gallery: React.FC = () => {
-  const [firestoreProjects, setFirestoreProjects] = useState<Project[]>([]);
-  const [deletedStaticIds, setDeletedStaticIds] = useState<number[]>([]);
+  const [firestoreProjects, setFirestoreProjects] = useState<Project[]>(() => {
+    try {
+      const s = localStorage.getItem('alamin_local_gallery');
+      return s ? JSON.parse(s) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [deletedStaticIds, setDeletedStaticIds] = useState<number[]>(() => {
+    try {
+      const s = localStorage.getItem('alamin_deleted_static_images');
+      return s ? JSON.parse(s) : [];
+    } catch {
+      return [];
+    }
+  });
   const [customOrderIds, setCustomOrderIds] = useState<string[]>(() => {
     try {
       const s = localStorage.getItem('alamin_gallery_order');
@@ -47,16 +61,51 @@ export const Gallery: React.FC = () => {
           order: typeof data.order === 'number' ? data.order : undefined
         };
       });
+
+      // Merge with local offline gallery items
+      try {
+        const stored = localStorage.getItem('alamin_local_gallery');
+        if (stored) {
+          const localItems: Project[] = JSON.parse(stored);
+          const map = new Map<string, Project>();
+          items.forEach(p => map.set(String(p.id), p));
+          localItems.forEach(p => {
+            if (!map.has(String(p.id))) {
+              map.set(String(p.id), p);
+            }
+          });
+          const merged = Array.from(map.values());
+          setFirestoreProjects(merged);
+          localStorage.setItem('alamin_local_gallery', JSON.stringify(merged));
+          return;
+        }
+      } catch (e) {}
+
       setFirestoreProjects(items);
+      try {
+        localStorage.setItem('alamin_local_gallery', JSON.stringify(items));
+      } catch (e) {}
     }, (error) => {
       console.warn("Firestore gallery snapshot notice:", error);
+      try {
+        const stored = localStorage.getItem('alamin_local_gallery');
+        if (stored) setFirestoreProjects(JSON.parse(stored));
+      } catch (e) {}
     });
 
     const qDeleted = query(collection(db, 'deleted_static_images'));
     const unsubscribeDeleted = onSnapshot(qDeleted, (snapshot) => {
-      setDeletedStaticIds(snapshot.docs.map(docSnap => Number(docSnap.id)));
+      const ids = snapshot.docs.map(docSnap => Number(docSnap.id));
+      setDeletedStaticIds(ids);
+      try {
+        localStorage.setItem('alamin_deleted_static_images', JSON.stringify(ids));
+      } catch (e) {}
     }, (error) => {
       console.warn("Deleted static images snapshot notice:", error);
+      try {
+        const stored = localStorage.getItem('alamin_deleted_static_images');
+        if (stored) setDeletedStaticIds(JSON.parse(stored));
+      } catch (e) {}
     });
 
     const unsubscribeOrder = onSnapshot(doc(db, 'gallery_order', 'main'), (snapshot) => {
@@ -71,6 +120,10 @@ export const Gallery: React.FC = () => {
       }
     }, (error) => {
       console.warn("Gallery order snapshot notice:", error);
+      try {
+        const stored = localStorage.getItem('alamin_gallery_order');
+        if (stored) setCustomOrderIds(JSON.parse(stored));
+      } catch (e) {}
     });
 
     return () => {
@@ -88,8 +141,28 @@ export const Gallery: React.FC = () => {
 
     try {
       if (isFirestore) {
-        await deleteDoc(doc(db, 'gallery', id as string));
+        setFirestoreProjects(prev => prev.filter(p => String(p.id) !== String(id)));
+        try {
+          const stored = localStorage.getItem('alamin_local_gallery');
+          if (stored) {
+            const filtered = JSON.parse(stored).filter((p: any) => String(p.id) !== String(id));
+            localStorage.setItem('alamin_local_gallery', JSON.stringify(filtered));
+          }
+        } catch (e) {}
+
+        if (!String(id).startsWith('proj_') && !String(id).startsWith('local_')) {
+          await deleteDoc(doc(db, 'gallery', id as string));
+        }
       } else {
+        setDeletedStaticIds(prev => [...prev, Number(id)]);
+        try {
+          const stored = localStorage.getItem('alamin_deleted_static_images');
+          const list = stored ? JSON.parse(stored) : [];
+          if (!list.includes(Number(id))) {
+            localStorage.setItem('alamin_deleted_static_images', JSON.stringify([...list, Number(id)]));
+          }
+        } catch (e) {}
+
         await setDoc(doc(db, 'deleted_static_images', id.toString()), { 
           deleted: true,
           deletedAt: new Date()
@@ -133,8 +206,8 @@ export const Gallery: React.FC = () => {
         const idB = String(b.id);
         const hasA = orderMap.has(idA);
         const hasB = orderMap.has(idB);
-        const posA = Number(hasA ? orderMap.get(idA) : (typeof a.order === 'number' ? a.order : 999));
-        const posB = Number(hasB ? orderMap.get(idB) : (typeof b.order === 'number' ? b.order : 999));
+        const posA = Number(hasA ? orderMap.get(idA) : (typeof a.order === 'number' ? a.order : 0));
+        const posB = Number(hasB ? orderMap.get(idB) : (typeof b.order === 'number' ? b.order : 0));
         return posA - posB;
       });
     }

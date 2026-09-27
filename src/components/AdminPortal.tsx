@@ -92,8 +92,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   const [leadStatusFilter, setLeadStatusFilter] = useState<'all' | 'new' | 'contacted' | 'closed'>('all');
 
   // Gallery state
-  const [firestoreProjects, setFirestoreProjects] = useState<Project[]>([]);
-  const [deletedStaticIds, setDeletedStaticIds] = useState<number[]>([]);
+  const [firestoreProjects, setFirestoreProjects] = useState<Project[]>(() => {
+    try {
+      const s = localStorage.getItem('alamin_local_gallery');
+      return s ? JSON.parse(s) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [deletedStaticIds, setDeletedStaticIds] = useState<number[]>(() => {
+    try {
+      const s = localStorage.getItem('alamin_deleted_static_images');
+      return s ? JSON.parse(s) : [];
+    } catch {
+      return [];
+    }
+  });
   const [customOrderIds, setCustomOrderIds] = useState<string[]>(() => {
     try {
       const s = localStorage.getItem('alamin_gallery_order');
@@ -107,7 +121,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   const [dragOverProjectIndex, setDragOverProjectIndex] = useState<number | null>(null);
 
   // Activity Log state
-  const [activities, setActivities] = useState<ActivityLogItem[]>([]);
+  const [activities, setActivities] = useState<ActivityLogItem[]>(() => {
+    try {
+      const s = localStorage.getItem('alamin_activity_log');
+      return s ? JSON.parse(s) : [];
+    } catch {
+      return [];
+    }
+  });
   const [activityFilter, setActivityFilter] = useState<'all' | 'leads' | 'gallery' | 'before_after'>('all');
   
   // Gallery Upload form states
@@ -229,14 +250,53 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
           order: typeof data.order === 'number' ? data.order : undefined
         };
       });
+
+      // Merge with any local offline gallery items
+      try {
+        const stored = localStorage.getItem('alamin_local_gallery');
+        if (stored) {
+          const localItems: Project[] = JSON.parse(stored);
+          const map = new Map<string, Project>();
+          items.forEach(p => map.set(String(p.id), p));
+          localItems.forEach(p => {
+            if (!map.has(String(p.id))) {
+              map.set(String(p.id), p);
+            }
+          });
+          const merged = Array.from(map.values());
+          setFirestoreProjects(merged);
+          localStorage.setItem('alamin_local_gallery', JSON.stringify(merged));
+          return;
+        }
+      } catch (e) {}
+
       setFirestoreProjects(items);
-    }, (err) => console.warn("Gallery error:", err));
+      try {
+        localStorage.setItem('alamin_local_gallery', JSON.stringify(items));
+      } catch (e) {}
+    }, (err) => {
+      console.warn("Gallery fetch notice:", err);
+      try {
+        const stored = localStorage.getItem('alamin_local_gallery');
+        if (stored) setFirestoreProjects(JSON.parse(stored));
+      } catch (e) {}
+    });
 
     // 3. Deleted static items listener
     const qDeleted = query(collection(db, 'deleted_static_images'));
     const unsubDeleted = onSnapshot(qDeleted, (snapshot) => {
-      setDeletedStaticIds(snapshot.docs.map(docSnap => Number(docSnap.id)));
-    }, (err) => console.warn("Deleted images error:", err));
+      const ids = snapshot.docs.map(docSnap => Number(docSnap.id));
+      setDeletedStaticIds(ids);
+      try {
+        localStorage.setItem('alamin_deleted_static_images', JSON.stringify(ids));
+      } catch (e) {}
+    }, (err) => {
+      console.warn("Deleted images fetch notice:", err);
+      try {
+        const stored = localStorage.getItem('alamin_deleted_static_images');
+        if (stored) setDeletedStaticIds(JSON.parse(stored));
+      } catch (e) {}
+    });
 
     // 4. Before & After listeners (main, before, after)
     const unsubBAMain = onSnapshot(doc(db, 'before_after', 'main'), (snapshot) => {
@@ -278,15 +338,48 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       }
     }, (err) => console.warn("BA after fetch error:", err));
 
-    // 5. Activity log listener
-    const qActivity = query(collection(db, 'activity_log'), orderBy('createdAt', 'desc'));
+    // 5. Activity log listener (sort in memory so missing indexes or pending timestamps never break logs)
+    const qActivity = collection(db, 'activity_log');
     const unsubActivity = onSnapshot(qActivity, (snapshot) => {
-      const items: ActivityLogItem[] = snapshot.docs.map(docSnap => ({
+      const remoteItems: ActivityLogItem[] = snapshot.docs.map(docSnap => ({
         id: docSnap.id,
         ...(docSnap.data() as any)
-      }));
-      setActivities(items);
-    }, (err) => console.warn("Activity log fetch notice:", err));
+      })).sort((a, b) => {
+        const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
+        const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
+        return timeB - timeA;
+      });
+
+      // Merge remote items with local items
+      try {
+        const stored = localStorage.getItem('alamin_activity_log');
+        if (stored) {
+          const localItems: ActivityLogItem[] = JSON.parse(stored);
+          const map = new Map<string, ActivityLogItem>();
+          remoteItems.forEach(item => { if (item.id) map.set(item.id, item); });
+          localItems.forEach(item => { if (item.id && !map.has(item.id)) map.set(item.id, item); });
+          const merged = Array.from(map.values()).sort((a, b) => {
+            const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
+            const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
+            return timeB - timeA;
+          });
+          setActivities(merged);
+          localStorage.setItem('alamin_activity_log', JSON.stringify(merged.slice(0, 100)));
+          return;
+        }
+      } catch (e) {}
+
+      setActivities(remoteItems);
+      try {
+        localStorage.setItem('alamin_activity_log', JSON.stringify(remoteItems.slice(0, 100)));
+      } catch (e) {}
+    }, (err) => {
+      console.warn("Activity log fetch notice:", err);
+      try {
+        const stored = localStorage.getItem('alamin_activity_log');
+        if (stored) setActivities(JSON.parse(stored));
+      } catch (e) {}
+    });
 
     // 6. Gallery custom order listener (synchronizes master ordering for all devices)
     const unsubOrder = onSnapshot(doc(db, 'gallery_order', 'main'), (snapshot) => {
@@ -299,7 +392,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
           } catch (e) {}
         }
       }
-    }, (err) => console.warn("Gallery order fetch notice:", err));
+    }, (err) => {
+      console.warn("Gallery order fetch notice:", err);
+      try {
+        const stored = localStorage.getItem('alamin_gallery_order');
+        if (stored) setCustomOrderIds(JSON.parse(stored));
+      } catch (e) {}
+    });
 
     return () => {
       unsubLeads();
@@ -340,6 +439,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
 
   // Activity Logger Helper
   const logActivity = async (type: 'leads' | 'gallery' | 'before_after', description: string) => {
+    const newLogItem: ActivityLogItem = {
+      id: 'act_' + Date.now() + '_' + Math.random().toString(36).substring(7),
+      type,
+      description,
+      createdAt: new Date().toISOString()
+    };
+
+    // 1. Immediately update UI state
+    setActivities(prev => [newLogItem, ...prev]);
+
+    // 2. Immediately save to LocalStorage
+    try {
+      const stored = localStorage.getItem('alamin_activity_log');
+      const list: ActivityLogItem[] = stored ? JSON.parse(stored) : [];
+      localStorage.setItem('alamin_activity_log', JSON.stringify([newLogItem, ...list.slice(0, 99)]));
+    } catch (e) {
+      console.warn("Local activity log write notice:", e);
+    }
+
+    // 3. Sync to Firestore in background
     try {
       await addDoc(collection(db, 'activity_log'), {
         type,
@@ -347,7 +466,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
         createdAt: serverTimestamp()
       });
     } catch (err) {
-      console.warn("Activity log write notice:", err);
+      console.warn("Activity log cloud sync notice:", err);
     }
   };
 
@@ -356,13 +475,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     if (!id) return;
     setActivityPendingDelete(null);
     setActivities(prev => prev.filter(a => a.id !== id));
+
+    try {
+      const stored = localStorage.getItem('alamin_activity_log');
+      if (stored) {
+        const filtered = JSON.parse(stored).filter((a: any) => a.id !== id);
+        localStorage.setItem('alamin_activity_log', JSON.stringify(filtered));
+      }
+    } catch (e) {}
+
     showToast("تم حذف السجل بنجاح", "success");
 
     try {
-      await deleteDoc(doc(db, 'activity_log', id));
+      if (!id.startsWith('act_')) {
+        await deleteDoc(doc(db, 'activity_log', id));
+      }
     } catch (err: any) {
-      console.error("Delete activity record error:", err);
-      showToast("تعذر حذف السجل من السيرفر", "error");
+      console.warn("Delete activity cloud notice:", err);
     }
   };
 
@@ -373,20 +502,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     setIsDeletingActivity(true);
     const toDelete = [...activities];
     setActivities([]);
-    showToast("جاري مسح السجلات...", "success");
+
+    try {
+      localStorage.removeItem('alamin_activity_log');
+    } catch (e) {}
+
+    showToast("تم مسح جميع السجلات بنجاح!", "success");
 
     try {
       const batch = writeBatch(db);
       toDelete.forEach(act => {
-        if (act.id) {
+        if (act.id && !act.id.startsWith('act_')) {
           batch.delete(doc(db, 'activity_log', act.id));
         }
       });
       await batch.commit();
-      showToast("تم مسح جميع السجلات بنجاح!", "success");
     } catch (err: any) {
-      console.error("Clear all activities error:", err);
-      showToast("تعذر مسح كافة السجلات من السيرفر", "error");
+      console.warn("Clear all cloud activities notice:", err);
     } finally {
       setIsDeletingActivity(false);
     }
@@ -459,40 +591,50 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     setCustomOrderIds(newOrderIds);
     try {
       localStorage.setItem('alamin_gallery_order', JSON.stringify(newOrderIds));
+      // Also update orders inside local gallery items
+      const localGalleryStored = localStorage.getItem('alamin_local_gallery');
+      if (localGalleryStored) {
+        const localItems: Project[] = JSON.parse(localGalleryStored);
+        const orderMap = new Map(newOrderIds.map((id, idx) => [id, idx]));
+        const updatedLocal = localItems.map(item => ({
+          ...item,
+          order: orderMap.has(String(item.id)) ? orderMap.get(String(item.id)) : item.order
+        }));
+        localStorage.setItem('alamin_local_gallery', JSON.stringify(updatedLocal));
+      }
     } catch (e) {}
 
-    // 2. Commit to Firestore
+    // 2. Log activity immediately
+    await logActivity('gallery', `إعادة ترتيب صور المعرض: نقل "${moved.title}" إلى الترتيب #${actualTo + 1}`);
+    showToast("تم تحديث وحفظ ترتيب صور المعرض بنجاح!", "success");
+
+    // 3. Background Cloud Sync
     try {
       const batch = writeBatch(db);
 
       // Save global master order document in gallery_order/main
-      // This permanently preserves the order of BOTH static and dynamic images across all devices
       batch.set(doc(db, 'gallery_order', 'main'), {
         orderIds: newOrderIds,
         updatedAt: serverTimestamp()
       }, { merge: true });
 
-      // Update individual Firestore documents
+      // Update individual Firestore documents using set with merge: true (never fails on missing doc)
       reordered.forEach((item, index) => {
-        if (item.isFirestore && item.id) {
-          batch.update(doc(db, 'gallery', String(item.id)), { order: index });
+        if (item.isFirestore && item.id && !String(item.id).startsWith('local_') && !String(item.id).startsWith('proj_')) {
+          batch.set(doc(db, 'gallery', String(item.id)), { order: index }, { merge: true });
         }
       });
 
       await batch.commit();
-      await logActivity('gallery', `إعادة ترتيب صور المعرض: نقل "${moved.title}" إلى الترتيب #${actualTo + 1}`);
-      showToast("تم حفظ الترتيب الجديد في السيرفر وتطبيقه على كافة الأجهزة والزوار فوراً!", "success");
     } catch (e: any) {
-      console.error("Reorder batch commit error, falling back to direct setDoc:", e);
+      console.warn("Cloud reorder sync notice (order saved locally):", e);
       try {
         await setDoc(doc(db, 'gallery_order', 'main'), {
           orderIds: newOrderIds,
           updatedAt: serverTimestamp()
         }, { merge: true });
-        showToast("تم حفظ الترتيب الجديد في السيرفر بنجاح!", "success");
       } catch (err2) {
-        console.error("Fallback setDoc error:", err2);
-        showToast("تعذر حفظ الترتيب في السيرفر، يرجى المحاولة مرة أخرى", "error");
+        console.warn("Fallback setDoc notice:", err2);
       }
     }
   };
@@ -589,32 +731,64 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       }
 
       setUploadStatusText('جاري الحفظ في المعرض...');
-      // Set initial order so new upload appears at the top
-      const minOrder = allProjects.length > 0 ? Math.min(...allProjects.map(p => p.order ?? 0)) : 0;
-      const newOrder = Math.max(0, minOrder <= 0 ? 0 : minOrder - 1);
-
-      const docRef = await addDoc(collection(db, 'gallery'), {
+      
+      const localId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substring(7);
+      const newProject: Project = {
+        id: localId,
         title: title.trim(),
         category,
         image: finalImageUrl || previewUrl,
-        createdAt: serverTimestamp(),
-        order: newOrder
-      });
+        isFirestore: true,
+        createdAt: new Date().toISOString(),
+        order: 0
+      };
 
-      // Update global master order putting newly uploaded image at the top
-      const updatedOrderIds = [docRef.id, ...customOrderIds.filter(oid => oid !== docRef.id)];
+      // 1. Instant optimistic update in React state
+      setFirestoreProjects(prev => [newProject, ...prev]);
+      const updatedOrderIds = [String(localId), ...customOrderIds.filter(oid => oid !== String(localId))];
       setCustomOrderIds(updatedOrderIds);
+
+      // 2. Instant save to LocalStorage (persists across reloads even if cloud quota exhausted)
       try {
+        const currentLocal = JSON.parse(localStorage.getItem('alamin_local_gallery') || '[]');
+        localStorage.setItem('alamin_local_gallery', JSON.stringify([newProject, ...currentLocal]));
         localStorage.setItem('alamin_gallery_order', JSON.stringify(updatedOrderIds));
-        await setDoc(doc(db, 'gallery_order', 'main'), {
-          orderIds: updatedOrderIds,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      } catch (orderErr) {
-        console.warn("Update gallery_order on upload notice:", orderErr);
+      } catch (e) {
+        console.warn("Local storage save notice:", e);
       }
 
+      // 3. Log activity immediately
       await logActivity('gallery', `إضافة مشروع جديد للمعرض: "${title.trim()}" في تصنيف "${category}"`);
+
+      // 4. Background cloud sync to Firestore
+      try {
+        const docRef = await addDoc(collection(db, 'gallery'), {
+          title: title.trim(),
+          category,
+          image: finalImageUrl || previewUrl,
+          createdAt: serverTimestamp(),
+          order: 0
+        });
+
+        if (docRef?.id) {
+          const cloudId = docRef.id;
+          setFirestoreProjects(prev => prev.map(p => p.id === localId ? { ...p, id: cloudId } : p));
+          const syncedOrderIds = updatedOrderIds.map(oid => oid === localId ? cloudId : oid);
+          setCustomOrderIds(syncedOrderIds);
+          try {
+            const currentLocal = JSON.parse(localStorage.getItem('alamin_local_gallery') || '[]');
+            const updatedLocal = currentLocal.map((p: any) => p.id === localId ? { ...p, id: cloudId } : p);
+            localStorage.setItem('alamin_local_gallery', JSON.stringify(updatedLocal));
+            localStorage.setItem('alamin_gallery_order', JSON.stringify(syncedOrderIds));
+            await setDoc(doc(db, 'gallery_order', 'main'), {
+              orderIds: syncedOrderIds,
+              updatedAt: serverTimestamp()
+            }, { merge: true });
+          } catch (e) {}
+        }
+      } catch (cloudErr) {
+        console.warn("Firestore gallery upload sync notice (persisted locally):", cloudErr);
+      }
 
       setTitle('');
       setSelectedFile(null);
@@ -625,7 +799,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       showToast("تمت إضافة المشروع للمعرض بنجاح وبسرعة فائقة!", "success");
     } catch (error: any) {
       console.error("Upload error:", error);
-      showToast(`حدث خطأ أثناء الرفع والحفظ: ${error?.message || 'يرجى المحاولة مرة أخرى'}`, "error");
+      showToast(`حدث خطأ أثناء الرفع: ${error?.message || 'يرجى المحاولة مرة أخرى'}`, "error");
     } finally {
       setIsUploading(false);
       setUploadStatusText('');
@@ -635,10 +809,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   const handleConfirmDeleteGalleryItem = async (id: string | number, isFirestore?: boolean) => {
     const target = allProjects.find(p => p.id === id);
     setGalleryItemPendingDelete(null);
+
+    // 1. Instant local removal from state and LocalStorage
     if (isFirestore) {
-      setFirestoreProjects(prev => prev.filter(p => p.id !== id));
+      setFirestoreProjects(prev => prev.filter(p => String(p.id) !== String(id)));
+      try {
+        const stored = localStorage.getItem('alamin_local_gallery');
+        if (stored) {
+          const filtered = JSON.parse(stored).filter((p: any) => String(p.id) !== String(id));
+          localStorage.setItem('alamin_local_gallery', JSON.stringify(filtered));
+        }
+      } catch (e) {}
     } else {
       setDeletedStaticIds(prev => [...prev, Number(id)]);
+      try {
+        const stored = localStorage.getItem('alamin_deleted_static_images');
+        const list = stored ? JSON.parse(stored) : [];
+        if (!list.includes(Number(id))) {
+          localStorage.setItem('alamin_deleted_static_images', JSON.stringify([...list, Number(id)]));
+        }
+      } catch (e) {}
     }
 
     // Remove from customOrderIds and persist to gallery_order/main
@@ -646,29 +836,28 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     setCustomOrderIds(updatedOrderIds);
     try {
       localStorage.setItem('alamin_gallery_order', JSON.stringify(updatedOrderIds));
+    } catch (orderErr) {}
+
+    await logActivity('gallery', `حذف مشروع من المعرض: "${target?.title || id}"`);
+    showToast("تم حذف المشروع من المعرض بنجاح!", "success");
+
+    // 2. Background Cloud Sync
+    try {
       await setDoc(doc(db, 'gallery_order', 'main'), {
         orderIds: updatedOrderIds,
         updatedAt: serverTimestamp()
       }, { merge: true });
-    } catch (orderErr) {
-      console.warn("Update gallery_order on delete notice:", orderErr);
-    }
 
-    showToast("تم حذف المشروع من المعرض بنجاح!", "success");
-
-    try {
-      if (isFirestore) {
+      if (isFirestore && !String(id).startsWith('proj_') && !String(id).startsWith('local_')) {
         await deleteDoc(doc(db, 'gallery', id as string));
-      } else {
+      } else if (!isFirestore) {
         await setDoc(doc(db, 'deleted_static_images', id.toString()), { 
           deleted: true,
           deletedAt: new Date()
         });
       }
-      await logActivity('gallery', `حذف مشروع من المعرض: "${target?.title || id}"`);
     } catch (error) {
-      console.error("Delete gallery item error:", error);
-      showToast("تعذر حذف المشروع من السيرفر", "error");
+      console.warn("Delete gallery item cloud sync notice (removed locally):", error);
     }
   };
 
@@ -903,8 +1092,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
         const idB = String(b.id);
         const hasA = orderMap.has(idA);
         const hasB = orderMap.has(idB);
-        const posA = Number(hasA ? orderMap.get(idA) : (typeof a.order === 'number' ? a.order : 999));
-        const posB = Number(hasB ? orderMap.get(idB) : (typeof b.order === 'number' ? b.order : 999));
+        const posA = Number(hasA ? orderMap.get(idA) : (typeof a.order === 'number' ? a.order : 0));
+        const posB = Number(hasB ? orderMap.get(idB) : (typeof b.order === 'number' ? b.order : 0));
         return posA - posB;
       });
     }
