@@ -45,11 +45,6 @@ export default function App() {
     }
   };
 
-  const handleNavigateToAdmin = () => {
-    setIsAdminRoute(true);
-    window.location.hash = 'admin';
-  };
-
   // Completely separate standalone Admin Portal
   if (isAdminRoute) {
     return <AdminPortal onBackToPublicSite={handleBackToPublicSite} />;
@@ -88,8 +83,8 @@ export default function App() {
         <Contact />
       </main>
 
-      {/* Footer with Discreet Admin Link */}
-      <Footer onNavigateToAdmin={handleNavigateToAdmin} />
+      {/* Clean Public Footer without any admin portal link */}
+      <Footer />
 
       {/* Interactive Floating Customer Widgets (Clean Customer Experience) */}
       <WhatsAppButton />

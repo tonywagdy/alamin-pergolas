@@ -1,12 +1,8 @@
 import React from 'react';
-import { MessageCircle, Facebook, Instagram, Phone, MapPin, Lock } from 'lucide-react';
+import { MessageCircle, Facebook, Instagram, Phone, MapPin } from 'lucide-react';
 import { LOGO_URL, PHONE_NUMBER_INTL, PHONE_NUMBER_LOCAL, trackGAEvent } from '../data';
 
-interface FooterProps {
-  onNavigateToAdmin?: () => void;
-}
-
-export const Footer: React.FC<FooterProps> = ({ onNavigateToAdmin }) => {
+export const Footer: React.FC = () => {
   return (
     <footer className="bg-[#0e2c4d] text-white py-14 border-t border-white/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -124,24 +120,6 @@ export const Footer: React.FC<FooterProps> = ({ onNavigateToAdmin }) => {
             <span className="text-amber-400 font-semibold tracking-wide hover:text-amber-300 transition-colors">Tony Wagdy</span>
             <span className="text-white/30">·</span>
             <span className="text-gray-400">Web Development</span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => {
-                if (onNavigateToAdmin) {
-                  onNavigateToAdmin();
-                } else {
-                  window.location.hash = 'admin';
-                }
-              }}
-              className="text-gray-500 hover:text-amber-400 transition-colors flex items-center gap-1 cursor-pointer"
-              title="بوابة الإدارة المركزية"
-              aria-label="بوابة الإدارة المركزية لشركة الأمين"
-            >
-              <Lock size={12} />
-              <span>بوابة الإدارة</span>
-            </button>
           </div>
         </div>
       </div>
