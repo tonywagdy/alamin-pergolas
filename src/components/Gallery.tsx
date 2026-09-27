@@ -19,6 +19,14 @@ const CATEGORIES = [
 export const Gallery: React.FC = () => {
   const [firestoreProjects, setFirestoreProjects] = useState<Project[]>([]);
   const [deletedStaticIds, setDeletedStaticIds] = useState<number[]>([]);
+  const [customOrderIds, setCustomOrderIds] = useState<string[]>(() => {
+    try {
+      const s = localStorage.getItem('alamin_gallery_order');
+      return s ? JSON.parse(s) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isAdmin, setIsAdmin] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("الكل");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -51,10 +59,25 @@ export const Gallery: React.FC = () => {
       console.warn("Deleted static images snapshot notice:", error);
     });
 
+    const unsubscribeOrder = onSnapshot(doc(db, 'gallery_order', 'main'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (Array.isArray(data.orderIds)) {
+          setCustomOrderIds(data.orderIds);
+          try {
+            localStorage.setItem('alamin_gallery_order', JSON.stringify(data.orderIds));
+          } catch (e) {}
+        }
+      }
+    }, (error) => {
+      console.warn("Gallery order snapshot notice:", error);
+    });
+
     return () => {
       unsubscribeAuth();
       unsubscribeDb();
       unsubscribeDeleted();
+      unsubscribeOrder();
     };
   }, []);
 
@@ -72,24 +95,52 @@ export const Gallery: React.FC = () => {
           deletedAt: new Date()
         });
       }
+
+      // Remove from customOrderIds and persist to gallery_order/main
+      const updatedOrderIds = customOrderIds.filter(orderId => orderId !== String(id));
+      setCustomOrderIds(updatedOrderIds);
+      try {
+        localStorage.setItem('alamin_gallery_order', JSON.stringify(updatedOrderIds));
+        await setDoc(doc(db, 'gallery_order', 'main'), {
+          orderIds: updatedOrderIds,
+          updatedAt: new Date()
+        }, { merge: true });
+      } catch (orderErr) {}
     } catch (error) {
       console.error("Delete failed", error);
       alert("حدث خطأ أثناء الحذف، يرجى المحاولة مرة أخرى.");
     }
   };
 
-  const allProjects: Project[] = [
-    ...firestoreProjects.map((p, idx) => ({
-      ...p,
-      isFirestore: true,
-      order: typeof p.order === 'number' ? p.order : idx
-    })),
-    ...PROJECTS.filter(p => !deletedStaticIds.includes(Number(p.id))).map((p, idx) => ({
-      ...p,
-      isFirestore: false,
-      order: typeof p.order === 'number' ? p.order : (100 + idx)
-    }))
-  ].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const allProjects: Project[] = React.useMemo(() => {
+    const rawList: Project[] = [
+      ...firestoreProjects.map((p, idx) => ({
+        ...p,
+        isFirestore: true,
+        order: typeof p.order === 'number' ? p.order : idx
+      })),
+      ...PROJECTS.filter(p => !deletedStaticIds.includes(Number(p.id))).map((p, idx) => ({
+        ...p,
+        isFirestore: false,
+        order: typeof p.order === 'number' ? p.order : (100 + idx)
+      }))
+    ];
+
+    if (customOrderIds.length > 0) {
+      const orderMap = new Map<string, number>(customOrderIds.map((id, index) => [String(id), index]));
+      return rawList.sort((a, b) => {
+        const idA = String(a.id);
+        const idB = String(b.id);
+        const hasA = orderMap.has(idA);
+        const hasB = orderMap.has(idB);
+        const posA = Number(hasA ? orderMap.get(idA) : (typeof a.order === 'number' ? a.order : 999));
+        const posB = Number(hasB ? orderMap.get(idB) : (typeof b.order === 'number' ? b.order : 999));
+        return posA - posB;
+      });
+    }
+
+    return rawList.sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0));
+  }, [firestoreProjects, deletedStaticIds, customOrderIds]);
 
   const filteredProjects = selectedCategory === "الكل"
     ? allProjects

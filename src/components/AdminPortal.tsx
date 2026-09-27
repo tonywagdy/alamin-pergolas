@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Shield, 
@@ -94,6 +94,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   // Gallery state
   const [firestoreProjects, setFirestoreProjects] = useState<Project[]>([]);
   const [deletedStaticIds, setDeletedStaticIds] = useState<number[]>([]);
+  const [customOrderIds, setCustomOrderIds] = useState<string[]>(() => {
+    try {
+      const s = localStorage.getItem('alamin_gallery_order');
+      return s ? JSON.parse(s) : [];
+    } catch {
+      return [];
+    }
+  });
   const [galleryCategoryFilter, setGalleryCategoryFilter] = useState('الكل');
   const [draggedProjectIndex, setDraggedProjectIndex] = useState<number | null>(null);
   const [dragOverProjectIndex, setDragOverProjectIndex] = useState<number | null>(null);
@@ -280,6 +288,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       setActivities(items);
     }, (err) => console.warn("Activity log fetch notice:", err));
 
+    // 6. Gallery custom order listener (synchronizes master ordering for all devices)
+    const unsubOrder = onSnapshot(doc(db, 'gallery_order', 'main'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (Array.isArray(data.orderIds)) {
+          setCustomOrderIds(data.orderIds);
+          try {
+            localStorage.setItem('alamin_gallery_order', JSON.stringify(data.orderIds));
+          } catch (e) {}
+        }
+      }
+    }, (err) => console.warn("Gallery order fetch notice:", err));
+
     return () => {
       unsubLeads();
       unsubGallery();
@@ -288,6 +309,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       unsubBABefore();
       unsubBAAfter();
       unsubActivity();
+      unsubOrder();
     };
   }, [user]);
 
@@ -415,35 +437,63 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
 
   // Gallery Reordering & Actions
   const handleReorder = async (fromIndex: number, toIndex: number) => {
-    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= allProjects.length || toIndex >= allProjects.length) return;
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
     
+    // Resolve items from filteredProjects (the current view)
+    const fromItem = filteredProjects[fromIndex];
+    const toItem = filteredProjects[toIndex];
+    if (!fromItem || !toItem) return;
+
+    // Find their positions in allProjects (the full catalogue)
+    const actualFrom = allProjects.findIndex(p => String(p.id) === String(fromItem.id));
+    const actualTo = allProjects.findIndex(p => String(p.id) === String(toItem.id));
+    if (actualFrom === -1 || actualTo === -1 || actualFrom === actualTo) return;
+
     const reordered = [...allProjects];
-    const [moved] = reordered.splice(fromIndex, 1);
-    reordered.splice(toIndex, 0, moved);
+    const [moved] = reordered.splice(actualFrom, 1);
+    reordered.splice(actualTo, 0, moved);
 
-    // Optimistically update
-    const batch = writeBatch(db);
-    let firestoreUpdates = 0;
+    const newOrderIds = reordered.map(p => String(p.id));
 
-    reordered.forEach((item, index) => {
-      item.order = index;
-      if (item.isFirestore && item.id) {
-        batch.update(doc(db, 'gallery', item.id.toString()), { order: index });
-        firestoreUpdates++;
-      }
-    });
+    // 1. Instant optimistic update so UI reflects the new order immediately
+    setCustomOrderIds(newOrderIds);
+    try {
+      localStorage.setItem('alamin_gallery_order', JSON.stringify(newOrderIds));
+    } catch (e) {}
 
-    if (firestoreUpdates > 0) {
+    // 2. Commit to Firestore
+    try {
+      const batch = writeBatch(db);
+
+      // Save global master order document in gallery_order/main
+      // This permanently preserves the order of BOTH static and dynamic images across all devices
+      batch.set(doc(db, 'gallery_order', 'main'), {
+        orderIds: newOrderIds,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      // Update individual Firestore documents
+      reordered.forEach((item, index) => {
+        if (item.isFirestore && item.id) {
+          batch.update(doc(db, 'gallery', String(item.id)), { order: index });
+        }
+      });
+
+      await batch.commit();
+      await logActivity('gallery', `إعادة ترتيب صور المعرض: نقل "${moved.title}" إلى الترتيب #${actualTo + 1}`);
+      showToast("تم حفظ الترتيب الجديد في السيرفر وتطبيقه على كافة الأجهزة والزوار فوراً!", "success");
+    } catch (e: any) {
+      console.error("Reorder batch commit error, falling back to direct setDoc:", e);
       try {
-        await batch.commit();
-        await logActivity('gallery', `إعادة ترتيب صور المعرض: نقل "${moved.title}" إلى الترتيب #${toIndex + 1}`);
-        showToast("تم تحديث ترتيب صور المعرض بنجاح", "success");
-      } catch (e: any) {
-        console.error("Reorder batch commit error:", e);
-        showToast("تعذر حفظ الترتيب الجديد في السيرفر", "error");
+        await setDoc(doc(db, 'gallery_order', 'main'), {
+          orderIds: newOrderIds,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        showToast("تم حفظ الترتيب الجديد في السيرفر بنجاح!", "success");
+      } catch (err2) {
+        console.error("Fallback setDoc error:", err2);
+        showToast("تعذر حفظ الترتيب في السيرفر، يرجى المحاولة مرة أخرى", "error");
       }
-    } else {
-      showToast("تم تحديث ترتيب الصور", "success");
     }
   };
 
@@ -543,13 +593,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       const minOrder = allProjects.length > 0 ? Math.min(...allProjects.map(p => p.order ?? 0)) : 0;
       const newOrder = Math.max(0, minOrder <= 0 ? 0 : minOrder - 1);
 
-      await addDoc(collection(db, 'gallery'), {
+      const docRef = await addDoc(collection(db, 'gallery'), {
         title: title.trim(),
         category,
         image: finalImageUrl || previewUrl,
         createdAt: serverTimestamp(),
         order: newOrder
       });
+
+      // Update global master order putting newly uploaded image at the top
+      const updatedOrderIds = [docRef.id, ...customOrderIds.filter(oid => oid !== docRef.id)];
+      setCustomOrderIds(updatedOrderIds);
+      try {
+        localStorage.setItem('alamin_gallery_order', JSON.stringify(updatedOrderIds));
+        await setDoc(doc(db, 'gallery_order', 'main'), {
+          orderIds: updatedOrderIds,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } catch (orderErr) {
+        console.warn("Update gallery_order on upload notice:", orderErr);
+      }
 
       await logActivity('gallery', `إضافة مشروع جديد للمعرض: "${title.trim()}" في تصنيف "${category}"`);
 
@@ -577,6 +640,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     } else {
       setDeletedStaticIds(prev => [...prev, Number(id)]);
     }
+
+    // Remove from customOrderIds and persist to gallery_order/main
+    const updatedOrderIds = customOrderIds.filter(orderId => orderId !== String(id));
+    setCustomOrderIds(updatedOrderIds);
+    try {
+      localStorage.setItem('alamin_gallery_order', JSON.stringify(updatedOrderIds));
+      await setDoc(doc(db, 'gallery_order', 'main'), {
+        orderIds: updatedOrderIds,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (orderErr) {
+      console.warn("Update gallery_order on delete notice:", orderErr);
+    }
+
     showToast("تم حذف المشروع من المعرض بنجاح!", "success");
 
     try {
@@ -804,19 +881,36 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     return matchesStatus && matchesSearch;
   });
 
-  // Combined Projects sorted ascending by order
-  const allProjects: Project[] = [
-    ...firestoreProjects.map((p, idx) => ({
-      ...p,
-      isFirestore: true,
-      order: typeof p.order === 'number' ? p.order : idx
-    })),
-    ...PROJECTS.filter(p => !deletedStaticIds.includes(Number(p.id))).map((p, idx) => ({
-      ...p,
-      isFirestore: false,
-      order: typeof p.order === 'number' ? p.order : (100 + idx)
-    }))
-  ].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  // Combined Projects sorted ascending by order, matching Gallery.tsx exactly
+  const allProjects: Project[] = useMemo(() => {
+    const rawList: Project[] = [
+      ...firestoreProjects.map((p, idx) => ({
+        ...p,
+        isFirestore: true,
+        order: typeof p.order === 'number' ? p.order : idx
+      })),
+      ...PROJECTS.filter(p => !deletedStaticIds.includes(Number(p.id))).map((p, idx) => ({
+        ...p,
+        isFirestore: false,
+        order: typeof p.order === 'number' ? p.order : (100 + idx)
+      }))
+    ];
+
+    if (customOrderIds.length > 0) {
+      const orderMap = new Map<string, number>(customOrderIds.map((id, index) => [String(id), index]));
+      return rawList.sort((a, b) => {
+        const idA = String(a.id);
+        const idB = String(b.id);
+        const hasA = orderMap.has(idA);
+        const hasB = orderMap.has(idB);
+        const posA = Number(hasA ? orderMap.get(idA) : (typeof a.order === 'number' ? a.order : 999));
+        const posB = Number(hasB ? orderMap.get(idB) : (typeof b.order === 'number' ? b.order : 999));
+        return posA - posB;
+      });
+    }
+
+    return rawList.sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0));
+  }, [firestoreProjects, deletedStaticIds, customOrderIds]);
 
   const filteredProjects = galleryCategoryFilter === 'الكل'
     ? allProjects

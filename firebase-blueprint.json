@@ -49,6 +49,22 @@
       },
       "required": ["type", "description", "createdAt"]
     },
+    "GalleryOrder": {
+      "title": "Gallery Order",
+      "description": "Global custom ordering of all gallery projects",
+      "type": "object",
+      "properties": {
+        "orderIds": {
+          "type": "array",
+          "description": "Ordered array of project IDs"
+        },
+        "updatedAt": {
+          "type": "timestamp",
+          "description": "Timestamp of the last order change"
+        }
+      },
+      "required": ["orderIds"]
+    },
     "DeletedStaticImage": {
       "title": "Deleted Static Image",
       "description": "Tracks removed default static images",
@@ -127,6 +143,10 @@
     "/gallery/{itemId}": {
       "schema": "GalleryItem",
       "description": "Collection of gallery images"
+    },
+    "/gallery_order/{docId}": {
+      "schema": "GalleryOrder",
+      "description": "Global ordering of gallery items"
     },
     "/deleted_static_images/{id}": {
       "schema": "DeletedStaticImage",
