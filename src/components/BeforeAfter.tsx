@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { ArrowLeftRight, Sparkles } from 'lucide-react';
 import { BEFORE_AFTER_ITEMS } from '../data';
 import { db } from '../firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 
 export const BeforeAfter: React.FC = () => {
   const [sliderPosition, setSliderPosition] = useState<number>(50);
@@ -28,11 +28,20 @@ export const BeforeAfter: React.FC = () => {
     return BEFORE_AFTER_ITEMS[0];
   });
 
-  // Listen to live updates from Firestore across all devices
+  // Single lightweight fetch with timeout (conserves Firestore quota, prevents infinite listeners)
   useEffect(() => {
-    try {
-      const unsubMain = onSnapshot(doc(db, 'before_after', 'main'), (snapshot) => {
-        if (snapshot.exists()) {
+    let isMounted = true;
+
+    const fetchBeforeAfter = async () => {
+      try {
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('BeforeAfter fetch timeout')), 3500)
+        );
+
+        const fetchPromise = getDoc(doc(db, 'before_after', 'main'));
+        const snapshot = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+
+        if (isMounted && snapshot && snapshot.exists()) {
           const data = snapshot.data();
           if (data) {
             setCurrentItem(prev => {
@@ -51,48 +60,18 @@ export const BeforeAfter: React.FC = () => {
             });
           }
         }
-      }, (error) => {
-        console.warn("Before-after main live sync notice:", error);
-      });
-
-      const unsubBefore = onSnapshot(doc(db, 'before_after', 'before'), (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          if (data && data.image) {
-            setCurrentItem(prev => {
-              const updated = { ...prev, beforeImage: data.image };
-              try {
-                localStorage.setItem('alamin_before_after', JSON.stringify(updated));
-              } catch (err) {}
-              return updated;
-            });
-          }
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.warn("[Public] Before-after fetch fallback to cached/curated:", error);
         }
-      }, (err) => console.warn("Before sync notice:", err));
+      }
+    };
 
-      const unsubAfter = onSnapshot(doc(db, 'before_after', 'after'), (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          if (data && data.image) {
-            setCurrentItem(prev => {
-              const updated = { ...prev, afterImage: data.image };
-              try {
-                localStorage.setItem('alamin_before_after', JSON.stringify(updated));
-              } catch (err) {}
-              return updated;
-            });
-          }
-        }
-      }, (err) => console.warn("After sync notice:", err));
+    fetchBeforeAfter();
 
-      return () => {
-        unsubMain();
-        unsubBefore();
-        unsubAfter();
-      };
-    } catch (error) {
-      console.warn("Before-after listener notice:", error);
-    }
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const updatePosition = useCallback((clientX: number) => {

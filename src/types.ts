@@ -8,6 +8,8 @@ export interface Service {
   image: string;
 }
 
+export type SyncStatus = 'pending' | 'uploading' | 'synced' | 'failed' | 'deleted';
+
 export interface Project {
   id: number | string;
   title: string;
@@ -16,6 +18,13 @@ export interface Project {
   isFirestore?: boolean;
   createdAt?: any;
   order?: number;
+  localBlobId?: string;
+  firebaseStoragePath?: string;
+  downloadUrl?: string;
+  syncStatus?: SyncStatus;
+  updatedAt?: any;
+  retryCount?: number;
+  lastError?: string;
 }
 
 export interface Lead {
@@ -33,6 +42,7 @@ export interface ActivityLogItem {
   type: 'leads' | 'gallery' | 'before_after';
   description: string;
   createdAt: any;
+  syncStatus?: SyncStatus;
 }
 
 export interface BeforeAfterItem {

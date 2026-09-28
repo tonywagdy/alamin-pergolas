@@ -54,11 +54,19 @@ export const Contact: React.FC = () => {
       console.warn("LocalStorage lead save notice:", err);
     }
 
-    // 2. Save lead to Firestore collection 'leads'
+    // 2. Save lead to Firestore collection 'leads' with 3.5s timeout (never hangs user submission)
     try {
-      await addDoc(collection(db, 'leads'), leadPayload);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Lead submission timeout')), 3500)
+      );
+      await Promise.race([
+        addDoc(collection(db, 'leads'), leadPayload),
+        timeoutPromise
+      ]);
     } catch (error) {
-      console.warn("Notice: Firestore save will sync or fallback locally:", error);
+      if (import.meta.env.DEV) {
+        console.warn("[Contact] Lead saved locally; cloud notice:", error);
+      }
     }
 
     // 3. Track event in Google Analytics

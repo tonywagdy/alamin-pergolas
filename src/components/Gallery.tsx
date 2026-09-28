@@ -2,10 +2,19 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Layers, Maximize2, Trash2, ArrowLeft, MessageCircle, X, ChevronRight, ChevronLeft } from 'lucide-react';
 import { db, auth } from '../firebase';
-import { collection, onSnapshot, query, orderBy, deleteDoc, doc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { PROJECTS, PHONE_NUMBER_INTL, trackGAEvent } from '../data';
 import { Project } from '../types';
+import { 
+  getLocalGallery, 
+  saveLocalGallery, 
+  getLocalOrder, 
+  saveLocalOrder, 
+  getLocalDeletedStaticIds, 
+  saveLocalDeletedStaticIds, 
+  enqueueDelete 
+} from '../utils/gallerySync';
 
 const CATEGORIES = [
   "الكل",
@@ -17,120 +26,87 @@ const CATEGORIES = [
 ];
 
 export const Gallery: React.FC = () => {
-  const [firestoreProjects, setFirestoreProjects] = useState<Project[]>(() => {
-    try {
-      const s = localStorage.getItem('alamin_local_gallery');
-      return s ? JSON.parse(s) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [deletedStaticIds, setDeletedStaticIds] = useState<number[]>(() => {
-    try {
-      const s = localStorage.getItem('alamin_deleted_static_images');
-      return s ? JSON.parse(s) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [customOrderIds, setCustomOrderIds] = useState<string[]>(() => {
-    try {
-      const s = localStorage.getItem('alamin_gallery_order');
-      return s ? JSON.parse(s) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [firestoreProjects, setFirestoreProjects] = useState<Project[]>(() => getLocalGallery());
+  const [deletedStaticIds, setDeletedStaticIds] = useState<number[]>(() => getLocalDeletedStaticIds());
+  const [customOrderIds, setCustomOrderIds] = useState<string[]>(() => getLocalOrder());
   const [isAdmin, setIsAdmin] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("الكل");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
+
+    // Detect admin session safely without blocking public visitor
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      setIsAdmin(user?.email === 'twagdy067@gmail.com');
+      if (isMounted) {
+        setIsAdmin(user?.email === 'twagdy067@gmail.com');
+      }
     });
 
-    const q = collection(db, 'gallery');
-    const unsubscribeDb = onSnapshot(q, (snapshot) => {
-      const items: Project[] = snapshot.docs.map(docSnap => {
-        const data = docSnap.data() as any;
-        return {
-          id: docSnap.id,
-          ...data,
-          isFirestore: true,
-          order: typeof data.order === 'number' ? data.order : undefined
-        };
-      });
-
-      // Merge with local offline gallery items
+    // Single lightweight fetch with timeout (conserves Firestore reads, no perpetual snapshot streams for public visitors)
+    const loadGalleryData = async () => {
       try {
-        const stored = localStorage.getItem('alamin_local_gallery');
-        if (stored) {
-          const localItems: Project[] = JSON.parse(stored);
-          const map = new Map<string, Project>();
-          items.forEach(p => map.set(String(p.id), p));
-          localItems.forEach(p => {
-            if (!map.has(String(p.id))) {
-              map.set(String(p.id), p);
-            }
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Public Gallery fetch timeout')), 4000)
+        );
+
+        const fetchAllPromise = Promise.all([
+          getDocs(collection(db, 'gallery')),
+          getDocs(collection(db, 'deleted_static_images')),
+          getDoc(doc(db, 'gallery_order', 'main'))
+        ]);
+
+        const [gallerySnap, deletedSnap, orderSnap] = (await Promise.race([
+          fetchAllPromise,
+          timeoutPromise
+        ])) as any;
+
+        if (!isMounted) return;
+
+        // 1. Process Gallery Items (Handles additions, updates, and complete deletions)
+        if (gallerySnap) {
+          const items: Project[] = gallerySnap.docs.map((docSnap: any) => {
+            const data = docSnap.data();
+            return {
+              id: docSnap.id,
+              ...data,
+              isFirestore: true,
+              syncStatus: 'synced',
+              order: typeof data.order === 'number' ? data.order : undefined
+            };
           });
-          const merged = Array.from(map.values());
-          setFirestoreProjects(merged);
-          localStorage.setItem('alamin_local_gallery', JSON.stringify(merged));
-          return;
+
+          setFirestoreProjects(items);
+          saveLocalGallery(items);
         }
-      } catch (e) {}
 
-      setFirestoreProjects(items);
-      try {
-        localStorage.setItem('alamin_local_gallery', JSON.stringify(items));
-      } catch (e) {}
-    }, (error) => {
-      console.warn("Firestore gallery snapshot notice:", error);
-      try {
-        const stored = localStorage.getItem('alamin_local_gallery');
-        if (stored) setFirestoreProjects(JSON.parse(stored));
-      } catch (e) {}
-    });
+        // 2. Process Deleted Static Images
+        if (deletedSnap) {
+          const ids = deletedSnap.docs.map((docSnap: any) => Number(docSnap.id));
+          setDeletedStaticIds(ids);
+          saveLocalDeletedStaticIds(ids);
+        }
 
-    const qDeleted = query(collection(db, 'deleted_static_images'));
-    const unsubscribeDeleted = onSnapshot(qDeleted, (snapshot) => {
-      const ids = snapshot.docs.map(docSnap => Number(docSnap.id));
-      setDeletedStaticIds(ids);
-      try {
-        localStorage.setItem('alamin_deleted_static_images', JSON.stringify(ids));
-      } catch (e) {}
-    }, (error) => {
-      console.warn("Deleted static images snapshot notice:", error);
-      try {
-        const stored = localStorage.getItem('alamin_deleted_static_images');
-        if (stored) setDeletedStaticIds(JSON.parse(stored));
-      } catch (e) {}
-    });
-
-    const unsubscribeOrder = onSnapshot(doc(db, 'gallery_order', 'main'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        if (Array.isArray(data.orderIds)) {
-          setCustomOrderIds(data.orderIds);
-          try {
-            localStorage.setItem('alamin_gallery_order', JSON.stringify(data.orderIds));
-          } catch (e) {}
+        // 3. Process Custom Order
+        if (orderSnap && orderSnap.exists()) {
+          const data = orderSnap.data();
+          if (Array.isArray(data.orderIds)) {
+            setCustomOrderIds(data.orderIds);
+            saveLocalOrder(data.orderIds);
+          }
+        }
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.warn("[Public Gallery] Fetch notice (offline/quota mode - preserving cached/curated):", error);
         }
       }
-    }, (error) => {
-      console.warn("Gallery order snapshot notice:", error);
-      try {
-        const stored = localStorage.getItem('alamin_gallery_order');
-        if (stored) setCustomOrderIds(JSON.parse(stored));
-      } catch (e) {}
-    });
+    };
+
+    loadGalleryData();
 
     return () => {
+      isMounted = false;
       unsubscribeAuth();
-      unsubscribeDb();
-      unsubscribeDeleted();
-      unsubscribeOrder();
     };
   }, []);
 
@@ -139,50 +115,16 @@ export const Gallery: React.FC = () => {
     const confirmDelete = window.confirm("هل أنت متأكد من رغبتك في حذف هذه الصورة نهائياً؟");
     if (!confirmDelete) return;
 
-    try {
-      if (isFirestore) {
-        setFirestoreProjects(prev => prev.filter(p => String(p.id) !== String(id)));
-        try {
-          const stored = localStorage.getItem('alamin_local_gallery');
-          if (stored) {
-            const filtered = JSON.parse(stored).filter((p: any) => String(p.id) !== String(id));
-            localStorage.setItem('alamin_local_gallery', JSON.stringify(filtered));
-          }
-        } catch (e) {}
-
-        if (!String(id).startsWith('proj_') && !String(id).startsWith('local_')) {
-          await deleteDoc(doc(db, 'gallery', id as string));
-        }
-      } else {
-        setDeletedStaticIds(prev => [...prev, Number(id)]);
-        try {
-          const stored = localStorage.getItem('alamin_deleted_static_images');
-          const list = stored ? JSON.parse(stored) : [];
-          if (!list.includes(Number(id))) {
-            localStorage.setItem('alamin_deleted_static_images', JSON.stringify([...list, Number(id)]));
-          }
-        } catch (e) {}
-
-        await setDoc(doc(db, 'deleted_static_images', id.toString()), { 
-          deleted: true,
-          deletedAt: new Date()
-        });
-      }
-
-      // Remove from customOrderIds and persist to gallery_order/main
-      const updatedOrderIds = customOrderIds.filter(orderId => orderId !== String(id));
-      setCustomOrderIds(updatedOrderIds);
-      try {
-        localStorage.setItem('alamin_gallery_order', JSON.stringify(updatedOrderIds));
-        await setDoc(doc(db, 'gallery_order', 'main'), {
-          orderIds: updatedOrderIds,
-          updatedAt: new Date()
-        }, { merge: true });
-      } catch (orderErr) {}
-    } catch (error) {
-      console.error("Delete failed", error);
-      alert("حدث خطأ أثناء الحذف، يرجى المحاولة مرة أخرى.");
+    if (isFirestore) {
+      setFirestoreProjects(prev => prev.filter(p => String(p.id) !== String(id)));
+    } else {
+      setDeletedStaticIds(prev => [...prev, Number(id)]);
     }
+
+    const updatedOrderIds = customOrderIds.filter(orderId => orderId !== String(id));
+    setCustomOrderIds(updatedOrderIds);
+
+    await enqueueDelete(id, isFirestore);
   };
 
   const allProjects: Project[] = React.useMemo(() => {
@@ -312,6 +254,8 @@ export const Gallery: React.FC = () => {
                 <img 
                   src={project.image} 
                   alt={project.title} 
+                  width={400}
+                  height={300}
                   className="w-full h-full object-cover transition-transform duration-600 group-hover:scale-105"
                   loading="lazy"
                   decoding="async"

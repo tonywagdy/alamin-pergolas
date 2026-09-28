@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { Services } from './components/Services';
@@ -10,7 +10,19 @@ import { FAQ } from './components/FAQ';
 import { Contact } from './components/Contact';
 import { Footer } from './components/Footer';
 import { WhatsAppButton } from './components/WhatsAppButton';
-import { AdminPortal } from './components/AdminPortal';
+import { ErrorBoundary } from './components/ErrorBoundary';
+
+// Code-split AdminPortal so public visitors never download admin-only code
+const AdminPortal = React.lazy(() => import('./components/AdminPortal'));
+
+function AdminLoadingFallback() {
+  return (
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white" dir="rtl">
+      <div className="w-10 h-10 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p className="text-sm font-bold text-slate-300">جاري تحميل لوحة التحكم الآمنة...</p>
+    </div>
+  );
+}
 
 export default function App() {
   const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => {
@@ -45,49 +57,55 @@ export default function App() {
     }
   };
 
-  // Completely separate standalone Admin Portal
+  // Completely separate standalone Admin Portal (lazy loaded)
   if (isAdminRoute) {
-    return <AdminPortal onBackToPublicSite={handleBackToPublicSite} />;
+    return (
+      <Suspense fallback={<AdminLoadingFallback />}>
+        <AdminPortal onBackToPublicSite={handleBackToPublicSite} />
+      </Suspense>
+    );
   }
 
-  // Clean Public Site (Free of any admin widgets or clutter)
+  // Clean Public Site (Free of any admin widgets or clutter, protected by ErrorBoundary)
   return (
-    <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-[#f39c12] selection:text-white" dir="rtl">
-      {/* Fixed Navigation */}
-      <Navbar />
+    <ErrorBoundary>
+      <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-[#f39c12] selection:text-white" dir="rtl">
+        {/* Fixed Navigation */}
+        <Navbar />
 
-      {/* Main Sections with Semantic Flow */}
-      <main>
-        {/* 1. Hero Landing */}
-        <Hero />
+        {/* Main Sections with Semantic Flow */}
+        <main>
+          {/* 1. Hero Landing */}
+          <Hero />
 
-        {/* 2. Core Services */}
-        <Services />
+          {/* 2. Core Services */}
+          <Services />
 
-        {/* 3. Real Gallery Showcase with Category Filters & Lightbox */}
-        <Gallery />
+          {/* 3. Real Gallery Showcase with Category Filters & Lightbox */}
+          <Gallery />
 
-        {/* 5. Work Steps & Execution Methodology */}
-        <WorkSteps />
+          {/* 5. Work Steps & Execution Methodology */}
+          <WorkSteps />
 
-        {/* 6. Before and After Transformations */}
-        <BeforeAfter />
+          {/* 6. Before and After Transformations */}
+          <BeforeAfter />
 
-        {/* 7. About Al-Amin with Verifiable Stats & Materials */}
-        <About />
+          {/* 7. About Al-Amin with Verifiable Stats & Materials */}
+          <About />
 
-        {/* 8. Comprehensive FAQ Accordion */}
-        <FAQ />
+          {/* 8. Comprehensive FAQ Accordion */}
+          <FAQ />
 
-        {/* 10. Contact Section & Lead Generation Form */}
-        <Contact />
-      </main>
+          {/* 10. Contact Section & Lead Generation Form */}
+          <Contact />
+        </main>
 
-      {/* Clean Public Footer without any admin portal link */}
-      <Footer />
+        {/* Clean Public Footer without any admin portal link */}
+        <Footer />
 
-      {/* Interactive Floating Customer Widgets (Clean Customer Experience) */}
-      <WhatsAppButton />
-    </div>
+        {/* Interactive Floating Customer Widgets (Clean Customer Experience) */}
+        <WhatsAppButton />
+      </div>
+    </ErrorBoundary>
   );
 }
