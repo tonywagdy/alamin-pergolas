@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Layers, Maximize2, Trash2, ArrowLeft, MessageCircle, X, ChevronRight, ChevronLeft } from 'lucide-react';
-import { db, auth } from '../firebase';
+import { Layers, Maximize2, ArrowLeft, MessageCircle, X, ChevronRight, ChevronLeft } from 'lucide-react';
+import { db } from '../firebase';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
 import { PROJECTS, PHONE_NUMBER_INTL, trackGAEvent } from '../data';
 import { Project } from '../types';
 import { 
@@ -12,8 +11,7 @@ import {
   getLocalOrder, 
   saveLocalOrder, 
   getLocalDeletedStaticIds, 
-  saveLocalDeletedStaticIds, 
-  enqueueDelete 
+  saveLocalDeletedStaticIds 
 } from '../utils/gallerySync';
 
 const CATEGORIES = [
@@ -29,21 +27,13 @@ export const Gallery: React.FC = () => {
   const [firestoreProjects, setFirestoreProjects] = useState<Project[]>(() => getLocalGallery());
   const [deletedStaticIds, setDeletedStaticIds] = useState<number[]>(() => getLocalDeletedStaticIds());
   const [customOrderIds, setCustomOrderIds] = useState<string[]>(() => getLocalOrder());
-  const [isAdmin, setIsAdmin] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("الكل");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    // Detect admin session safely without blocking public visitor
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      if (isMounted) {
-        setIsAdmin(user?.email === 'twagdy067@gmail.com');
-      }
-    });
-
-    // Single lightweight fetch with timeout (conserves Firestore reads, no perpetual snapshot streams for public visitors)
+    // Single lightweight fetch with timeout (deferred so it never competes with initial paint)
     const loadGalleryData = async () => {
       try {
         const timeoutPromise = new Promise((_, reject) =>
@@ -102,30 +92,14 @@ export const Gallery: React.FC = () => {
       }
     };
 
-    loadGalleryData();
+    // Defer network call until after initial paint
+    const timer = setTimeout(loadGalleryData, 200);
 
     return () => {
       isMounted = false;
-      unsubscribeAuth();
+      clearTimeout(timer);
     };
   }, []);
-
-  const handleDelete = async (id: string | number, isFirestore?: boolean, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const confirmDelete = window.confirm("هل أنت متأكد من رغبتك في حذف هذه الصورة نهائياً؟");
-    if (!confirmDelete) return;
-
-    if (isFirestore) {
-      setFirestoreProjects(prev => prev.filter(p => String(p.id) !== String(id)));
-    } else {
-      setDeletedStaticIds(prev => [...prev, Number(id)]);
-    }
-
-    const updatedOrderIds = customOrderIds.filter(orderId => orderId !== String(id));
-    setCustomOrderIds(updatedOrderIds);
-
-    await enqueueDelete(id, isFirestore);
-  };
 
   const allProjects: Project[] = React.useMemo(() => {
     const rawList: Project[] = [
@@ -275,17 +249,6 @@ export const Gallery: React.FC = () => {
                     </span>
                   </div>
                 </div>
-                
-                {isAdmin && (
-                  <button 
-                    onClick={(e) => handleDelete(project.id, project.isFirestore, e)}
-                    className="absolute top-3 left-3 bg-red-600 hover:bg-red-700 text-white p-2.5 rounded-full shadow-lg z-20 transition-all"
-                    aria-label="حذف هذه الصورة من المعرض"
-                    title="حذف الصورة"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
               </motion.div>
             ))}
           </AnimatePresence>

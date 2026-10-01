@@ -14,6 +14,8 @@ export const Footer: React.FC = () => {
                 <img 
                   src={LOGO_URL} 
                   alt="الأمين للبرجولات" 
+                  width={48}
+                  height={48}
                   className="h-12 w-auto" 
                   referrerPolicy="no-referrer" 
                 />

@@ -4,7 +4,7 @@ import { Project, BeforeAfterItem, WorkStep, FAQItem } from './types';
 // Phone configurations
 export const PHONE_NUMBER_INTL = "201017919385";
 export const PHONE_NUMBER_LOCAL = "01017919385";
-export const LOGO_URL = "./input_file_21.png";
+export const LOGO_URL = "./input_file_21.webp";
 
 // Customizable stats for About section
 export const COMPANY_STATS = {

@@ -18,6 +18,8 @@ export const Navbar: React.FC = () => {
             <img 
               src={LOGO_URL} 
               alt="شعار شركة الأمين للبرجولات" 
+              width={56}
+              height={56}
               className="h-14 w-auto rounded-lg" 
               referrerPolicy="no-referrer" 
             />

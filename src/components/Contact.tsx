@@ -212,8 +212,9 @@ export const Contact: React.FC = () => {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5">الاسم بالكامل *</label>
+                  <label htmlFor="customer-name" className="block text-xs font-bold text-gray-700 mb-1.5">الاسم بالكامل *</label>
                   <input 
+                    id="customer-name"
                     type="text" 
                     required
                     value={formData.name}
@@ -224,8 +225,9 @@ export const Contact: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5">رقم الهاتف أو الواتساب *</label>
+                  <label htmlFor="customer-phone" className="block text-xs font-bold text-gray-700 mb-1.5">رقم الهاتف أو الواتساب *</label>
                   <input 
+                    id="customer-phone"
                     type="tel" 
                     required
                     value={formData.phone}
@@ -237,8 +239,11 @@ export const Contact: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5">نوع الخدمة المطلوبة</label>
+                  <label htmlFor="service-type" className="block text-xs font-bold text-gray-700 mb-1.5">نوع الخدمة المطلوبة</label>
                   <select 
+                    id="service-type"
+                    name="service"
+                    aria-label="نوع الخدمة المطلوبة"
                     value={formData.service}
                     onChange={(e) => setFormData({ ...formData, service: e.target.value })}
                     className="w-full bg-slate-50 border border-gray-200 rounded-xl p-3.5 focus:border-[#f39c12] focus:ring-1 focus:ring-[#f39c12] outline-none text-sm font-medium"
@@ -252,8 +257,9 @@ export const Contact: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5">تفاصيل أو مقاسات تقريبية (اختياري)</label>
+                  <label htmlFor="customer-message" className="block text-xs font-bold text-gray-700 mb-1.5">تفاصيل أو مقاسات تقريبية (اختياري)</label>
                   <textarea 
+                    id="customer-message"
                     rows={3} 
                     value={formData.message}
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}

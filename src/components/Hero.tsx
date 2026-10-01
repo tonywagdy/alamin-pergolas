@@ -1,29 +1,8 @@
 import React from 'react';
-import { motion } from 'motion/react';
-import { ArrowLeft, MessageCircle, Sparkles, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Sparkles } from 'lucide-react';
 import { PHONE_NUMBER_INTL, trackGAEvent } from '../data';
 
 export const Hero: React.FC = () => {
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.15,
-        delayChildren: 0.1
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 25 },
-    visible: { 
-      opacity: 1, 
-      y: 0, 
-      transition: { type: "spring", stiffness: 90, damping: 18 } 
-    }
-  };
-
   const handleWhatsAppClick = () => {
     trackGAEvent('whatsapp_click', { source: 'hero' });
   };
@@ -45,44 +24,27 @@ export const Hero: React.FC = () => {
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-16 md:py-24">
-        <motion.div 
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="max-w-2xl text-white text-right"
-        >
+        <div className="max-w-2xl text-white text-right">
           {/* Badge */}
-          <motion.div 
-            variants={itemVariants}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#f39c12]/20 border border-[#f39c12]/40 text-amber-200 font-bold text-xs sm:text-sm mb-6"
-          >
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#f39c12]/20 border border-[#f39c12]/40 text-amber-200 font-bold text-xs sm:text-sm mb-6">
             <Sparkles size={16} className="text-[#f39c12] animate-pulse" />
             <span>تصنيع وتركيب في كل محافظات مصر بأعلى خامات</span>
-          </motion.div>
+          </div>
 
-          <motion.h1 
-            variants={itemVariants} 
-            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black mb-6 leading-tight select-none"
-          >
+          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black mb-6 leading-tight select-none">
             الأمين للبرجولات <br />
             <span className="relative inline-block text-[#f39c12]">
               دقة وأمانة
               <span className="absolute bottom-1 right-0 left-0 h-1.5 bg-amber-400/70 rounded-full"></span>
             </span>{" "}
             في كل قطعة خشب
-          </motion.h1>
+          </h1>
 
-          <motion.p 
-            variants={itemVariants}
-            className="text-lg sm:text-xl md:text-2xl mb-10 opacity-95 font-normal leading-relaxed text-gray-100 max-w-xl"
-          >
+          <p className="text-lg sm:text-xl md:text-2xl mb-10 opacity-95 font-normal leading-relaxed text-gray-100 max-w-xl">
             بنحول مساحتك الخارجية في الروف أو الحديقة لتحفة فنية تعيش معاك العمر كله. خشب طبيعي معالج ضد الشمس والمطر مع ضمان حقيقي على الجودة ومتابعة دورية.
-          </motion.p>
+          </p>
 
-          <motion.div 
-            variants={itemVariants}
-            className="flex flex-col sm:flex-row gap-4 justify-start"
-          >
+          <div className="flex flex-col sm:flex-row gap-4 justify-start">
             <a 
               href="#gallery" 
               className="bg-[#f39c12] text-white px-9 py-4 rounded-full text-base sm:text-lg font-extrabold hover:bg-amber-600 transition-all text-center shadow-lg hover:shadow-[#f39c12]/30 flex items-center justify-center gap-2 cursor-pointer"
@@ -101,13 +63,10 @@ export const Hero: React.FC = () => {
               <MessageCircle size={22} className="text-green-400" />
               <span>طلب معاينة مجانية عبر الواتساب</span>
             </a>
-          </motion.div>
+          </div>
 
           {/* Quick trust metrics */}
-          <motion.div 
-            variants={itemVariants}
-            className="mt-12 pt-8 border-t border-white/15 grid grid-cols-3 gap-4 text-center sm:text-right"
-          >
+          <div className="mt-12 pt-8 border-t border-white/15 grid grid-cols-3 gap-4 text-center sm:text-right">
             <div>
               <p className="text-2xl sm:text-3xl font-black text-[#f39c12]">10+ سنوات</p>
               <p className="text-xs sm:text-sm text-gray-200">خبرة مهنية في مصر</p>
@@ -120,8 +79,8 @@ export const Hero: React.FC = () => {
               <p className="text-2xl sm:text-3xl font-black text-[#f39c12]">100%</p>
               <p className="text-xs sm:text-sm text-gray-200">أخشاب طبيعية معالجة</p>
             </div>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       </div>
     </section>
   );

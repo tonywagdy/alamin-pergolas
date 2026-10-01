@@ -112,6 +112,7 @@ export const Services: React.FC = () => {
                   href={`https://wa.me/${PHONE_NUMBER_INTL}?text=${encodeURIComponent(`مرحباً شركة الأمين للبرجولات، أريد الاستفسار عن خدمة: ${service.title}`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
+                  aria-label={`استفسر عن خدمة ${service.title} عبر واتساب`}
                   className="text-xs sm:text-sm font-bold text-[#143d6a] group-hover:text-[#f39c12] flex items-center gap-1.5 transition-colors"
                 >
                   <span>استفسر عن الخدمة</span>

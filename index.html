@@ -13,19 +13,27 @@
     <link rel="canonical" href="https://www.alaminpergolas.com/" />
     <meta name="google-site-verification" content="google2f09b9169ebb31a8" />
 
+    <!-- Google Fonts Preconnect & Optimized Loading -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Amiri:wght@400;700&display=swap" />
+
+    <!-- Hero LCP Image Preload -->
+    <link rel="preload" as="image" href="./input_file_0.webp" fetchpriority="high" type="image/webp" />
+
     <!-- OpenGraph Metadata -->
     <meta property="og:site_name" content="الأمين للبرجولات" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="الأمين للبرجولات | تصميم وتنفيذ برجولات خشبية وحديدية في مصر" />
     <meta property="og:description" content="شركة الأمين متخصصة في تصنيع وتركيب أحدث البرجولات الخشبية للروف والحدائق والديكورات الخشبية في مصر بأعلى جودة وأفضل الأسعار وضمان حقيقي على الجودة." />
     <meta property="og:url" content="https://www.alaminpergolas.com/" />
-    <meta property="og:image" content="https://www.alaminpergolas.com/input_file_21.png" />
+    <meta property="og:image" content="https://www.alaminpergolas.com/input_file_21.webp" />
 
     <!-- Twitter Card Metadata -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="الأمين للبرجولات | أحدث تصاميم البرجولات في مصر" />
     <meta name="twitter:description" content="تصميم وتركيب برجولات خشبية وحديدية للحدائق والروفات بأجود أنواع الخشب المقاوم للشمس والمطر مع ضمان حقيقي على الجودة." />
-    <meta name="twitter:image" content="https://www.alaminpergolas.com/input_file_21.png" />
+    <meta name="twitter:image" content="https://www.alaminpergolas.com/input_file_21.webp" />
 
     <!-- Google Site Name Structured Data (Schema.org WebSite) -->
     <script type="application/ld+json">
@@ -155,13 +163,22 @@
     }
     </script>
 
-    <!-- Google Analytics (GA4) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+    <!-- Google Analytics (GA4) - Deferred to never delay FCP or LCP -->
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
-      gtag('config', 'G-XXXXXXXXXX');
+      // Load GA4 script asynchronously only if a valid measurement ID is set
+      var gaMeasurementId = 'G-XXXXXXXXXX';
+      if (gaMeasurementId && gaMeasurementId !== 'G-XXXXXXXXXX') {
+        window.addEventListener('load', function() {
+          var s = document.createElement('script');
+          s.async = true;
+          s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaMeasurementId;
+          document.head.appendChild(s);
+          gtag('config', gaMeasurementId);
+        });
+      }
     </script>
 
     <script>
