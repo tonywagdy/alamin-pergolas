@@ -51,7 +51,9 @@ export const BeforeAfter: React.FC = () => {
                 description: data.description || prev.description,
                 location: data.location || prev.location,
                 beforeImage: data.beforeImage || prev.beforeImage,
-                afterImage: data.afterImage || prev.afterImage
+                afterImage: data.afterImage || prev.afterImage,
+                aspectRatio: data.aspectRatio || (prev as any).aspectRatio || '4/3',
+                fitMode: data.fitMode || (prev as any).fitMode || 'contain'
               };
               try {
                 localStorage.setItem('alamin_before_after', JSON.stringify(updated));
@@ -158,8 +160,24 @@ export const BeforeAfter: React.FC = () => {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-label="سلايدر مقارنة الصور قبل وبعد"
-            className="relative aspect-[16/10] sm:aspect-[16/9] w-full rounded-3xl overflow-hidden shadow-2xl select-none border-4 border-slate-100 bg-slate-900 cursor-ew-resize touch-none focus:outline-none focus:ring-4 focus:ring-[#f39c12]/30"
+            className={`relative w-full rounded-3xl overflow-hidden shadow-2xl select-none border-4 border-slate-100 bg-slate-950 cursor-ew-resize touch-none focus:outline-none focus:ring-4 focus:ring-[#f39c12]/30 ${
+              (currentItem as any).aspectRatio === '4/3' ? 'aspect-[4/3] max-w-3xl mx-auto' :
+              (currentItem as any).aspectRatio === '16/10' ? 'aspect-[16/10] max-w-4xl mx-auto' :
+              (currentItem as any).aspectRatio === '3/4' ? 'aspect-[3/4] max-w-md mx-auto' :
+              'aspect-[4/3] sm:aspect-[16/10] max-w-4xl mx-auto'
+            }`}
           >
+            {/* Ambient Blurred Background (renders full image in background with blur for atmospheric fill without crop) */}
+            {((currentItem as any).fitMode !== 'cover') && (
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <img
+                  src={currentItem.afterImage}
+                  alt=""
+                  className="w-full h-full object-cover blur-2xl scale-125 opacity-35 brightness-75"
+                />
+              </div>
+            )}
+
             {/* 1. Permanent Badges (Always Visible on both sides) */}
             {/* Left side: AFTER (High contrast amber-600) */}
             <div className="absolute top-4 left-4 z-20 bg-amber-600 text-white font-extrabold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-lg border border-white/20 flex items-center gap-1.5 pointer-events-none">
@@ -176,7 +194,9 @@ export const BeforeAfter: React.FC = () => {
             <img
               src={currentItem.afterImage}
               alt={`${currentItem.title} - بعد التركيب`}
-              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+              className={`absolute inset-0 w-full h-full pointer-events-none ${
+                (currentItem as any).fitMode === 'cover' ? 'object-cover' : 'object-contain'
+              }`}
               loading="lazy"
               decoding="async"
               referrerPolicy="no-referrer"
@@ -187,10 +207,21 @@ export const BeforeAfter: React.FC = () => {
               className="absolute inset-0 overflow-hidden pointer-events-none"
               style={{ clipPath: `inset(0 0 0 ${sliderPosition}%)` }}
             >
+              {((currentItem as any).fitMode !== 'cover') && (
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                  <img
+                    src={currentItem.beforeImage}
+                    alt=""
+                    className="w-full h-full object-cover blur-2xl scale-125 opacity-35 brightness-75"
+                  />
+                </div>
+              )}
               <img
                 src={currentItem.beforeImage}
                 alt={`${currentItem.title} - قبل التركيب`}
-                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                className={`absolute inset-0 w-full h-full pointer-events-none ${
+                  (currentItem as any).fitMode === 'cover' ? 'object-cover' : 'object-contain'
+                }`}
                 loading="lazy"
                 decoding="async"
                 referrerPolicy="no-referrer"

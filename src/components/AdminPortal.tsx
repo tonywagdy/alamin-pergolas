@@ -151,6 +151,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   const [baTitle, setBaTitle] = useState(BEFORE_AFTER_ITEMS[0].title);
   const [baBeforeImage, setBaBeforeImage] = useState(BEFORE_AFTER_ITEMS[0].beforeImage);
   const [baAfterImage, setBaAfterImage] = useState(BEFORE_AFTER_ITEMS[0].afterImage);
+  const [baAspectRatio, setBaAspectRatio] = useState<'4/3' | '16/10' | '16/9' | '3/4'>('4/3');
+  const [baFitMode, setBaFitMode] = useState<'contain' | 'cover'>('contain');
   const [baBeforeBlob, setBaBeforeBlob] = useState<Blob | null>(null);
   const [baAfterBlob, setBaAfterBlob] = useState<Blob | null>(null);
   const [baDirty, setBaDirty] = useState(false);
@@ -294,6 +296,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
           if (data.title) setBaTitle(data.title);
           if (data.beforeImage) setBaBeforeImage(data.beforeImage);
           if (data.afterImage) setBaAfterImage(data.afterImage);
+          if (data.aspectRatio) setBaAspectRatio(data.aspectRatio);
+          if (data.fitMode) setBaFitMode(data.fitMode);
         }
       } else {
         try {
@@ -303,6 +307,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
             if (parsed.beforeImage) setBaBeforeImage(parsed.beforeImage);
             if (parsed.afterImage) setBaAfterImage(parsed.afterImage);
             if (parsed.title) setBaTitle(parsed.title);
+            if (parsed.aspectRatio) setBaAspectRatio(parsed.aspectRatio);
+            if (parsed.fitMode) setBaFitMode(parsed.fitMode);
           }
         } catch (e) {}
       }
@@ -771,6 +777,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
         beforeImage: finalBefore,
         afterImage: finalAfter,
         title: cleanTitle,
+        aspectRatio: baAspectRatio,
+        fitMode: baFitMode,
         updatedAt: serverTimestamp()
       }, { merge: true });
 
@@ -799,7 +807,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
         localStorage.setItem('alamin_before_after', JSON.stringify({
           beforeImage: finalBefore,
           afterImage: finalAfter,
-          title: cleanTitle
+          title: cleanTitle,
+          aspectRatio: baAspectRatio,
+          fitMode: baFitMode
         }));
       } catch (e) {}
 
@@ -820,12 +830,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     const defaultData = {
       beforeImage: BEFORE_AFTER_ITEMS[0].beforeImage,
       afterImage: BEFORE_AFTER_ITEMS[0].afterImage,
-      title: BEFORE_AFTER_ITEMS[0].title
+      title: BEFORE_AFTER_ITEMS[0].title,
+      aspectRatio: '4/3',
+      fitMode: 'contain'
     };
 
     setBaBeforeImage(defaultData.beforeImage);
     setBaAfterImage(defaultData.afterImage);
     setBaTitle(defaultData.title);
+    setBaAspectRatio('4/3');
+    setBaFitMode('contain');
     setBaDirty(false);
 
     try {
@@ -2220,6 +2234,84 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                   </div>
                 </div>
 
+                {/* Visual Fit Mode & Aspect Ratio Options */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                  {/* Option 1: Fit Mode */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-2">
+                      طريقة عرض وملاءمة الصور داخل السلايدر:
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setBaFitMode('contain'); setBaDirty(true); }}
+                        className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
+                          baFitMode === 'contain'
+                            ? 'bg-amber-500/20 border-amber-500 text-white ring-1 ring-amber-500'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-black text-amber-400">احتواء كامل (Smart Fit) ✨</span>
+                          {baFitMode === 'contain' && <CheckCircle2 size={14} className="text-amber-400" />}
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          إظهار الصورة كاملة 100% دون قص أي جزء من البرجولة مع خلفية ضبابية فخمة تملأ الجوانب.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setBaFitMode('cover'); setBaDirty(true); }}
+                        className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
+                          baFitMode === 'cover'
+                            ? 'bg-amber-500/20 border-amber-500 text-white ring-1 ring-amber-500'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-black text-amber-400">ملء الإطار (Cover)</span>
+                          {baFitMode === 'cover' && <CheckCircle2 size={14} className="text-amber-400" />}
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          ملء كامل مساحة الإطار مع قص الحواف الزائدة لتغطية الإطار كلياً.
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Option 2: Frame Aspect Ratio */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-2">
+                      أبعاد إطار السلايدر (نسبة العرض للارتفاع):
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { id: '4/3', label: '4:3 متوازن', desc: 'الأفضل للبرجولات' },
+                        { id: '16/10', label: '16:10 معتدل', desc: 'شاشة متناسقة' },
+                        { id: '16/9', label: '16:9 عريض', desc: 'مساحات أفقية' },
+                        { id: '3/4', label: '3:4 طولي', desc: 'لصور الموبايل' }
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => { setBaAspectRatio(item.id as any); setBaDirty(true); }}
+                          className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                            baAspectRatio === item.id
+                              ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-md'
+                              : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white text-xs font-bold'
+                          }`}
+                        >
+                          <span className="block text-xs">{item.label}</span>
+                          <span className={`block text-[9px] mt-0.5 ${baAspectRatio === item.id ? 'text-slate-900 font-bold' : 'text-slate-500'}`}>
+                            {item.desc}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {baSuccessMsg && (
                   <div className="p-3 bg-emerald-950/60 border border-emerald-800/80 rounded-xl text-emerald-300 text-xs font-bold text-center">
                     {baSuccessMsg}
@@ -2293,37 +2385,66 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                 ref={testSliderRef}
                 onMouseMove={(e) => updateTestPosition(e.clientX)}
                 onTouchMove={(e) => e.touches[0] && updateTestPosition(e.touches[0].clientX)}
-                className="relative aspect-[16/9] sm:aspect-[21/9] rounded-2xl overflow-hidden select-none cursor-ew-resize border border-slate-800 shadow-2xl"
+                className={`relative w-full rounded-2xl overflow-hidden select-none cursor-ew-resize border border-slate-800 shadow-2xl bg-slate-950 transition-all ${
+                  baAspectRatio === '4/3' ? 'aspect-[4/3] max-w-2xl mx-auto' :
+                  baAspectRatio === '16/10' ? 'aspect-[16/10] max-w-3xl mx-auto' :
+                  baAspectRatio === '3/4' ? 'aspect-[3/4] max-w-md mx-auto' :
+                  'aspect-[16/9] max-w-3xl mx-auto'
+                }`}
               >
+                {/* Ambient Blurred Background for contain mode */}
+                {baFitMode === 'contain' && (
+                  <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                    <img
+                      src={baAfterImage}
+                      alt=""
+                      className="w-full h-full object-cover blur-2xl scale-125 opacity-35 brightness-75"
+                    />
+                  </div>
+                )}
+
                 {/* AFTER Image (Background) */}
                 <img
                   src={baAfterImage}
                   alt="بعد التركيب"
-                  className="absolute inset-0 w-full h-full object-cover"
+                  className={`absolute inset-0 w-full h-full pointer-events-none ${
+                    baFitMode === 'contain' ? 'object-contain' : 'object-cover'
+                  }`}
                 />
 
                 {/* BEFORE Image (Clipped Overlay) */}
                 <div 
-                  className="absolute inset-0 overflow-hidden"
+                  className="absolute inset-0 overflow-hidden pointer-events-none"
                   style={{ clipPath: `inset(0 ${100 - testSliderPos}% 0 0)` }}
                 >
+                  {baFitMode === 'contain' && (
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                      <img
+                        src={baBeforeImage}
+                        alt=""
+                        className="w-full h-full object-cover blur-2xl scale-125 opacity-35 brightness-75"
+                      />
+                    </div>
+                  )}
                   <img
                     src={baBeforeImage}
                     alt="قبل العمل"
-                    className="absolute inset-0 w-full h-full object-cover"
+                    className={`absolute inset-0 w-full h-full pointer-events-none ${
+                      baFitMode === 'contain' ? 'object-contain' : 'object-cover'
+                    }`}
                   />
-                  <span className="absolute top-4 right-4 bg-slate-950/80 backdrop-blur-md text-white px-3 py-1 rounded-full text-xs font-bold border border-white/10">
+                  <span className="absolute top-4 right-4 bg-slate-950/80 backdrop-blur-md text-white px-3 py-1 rounded-full text-xs font-bold border border-white/10 z-10">
                     قبل العمل
                   </span>
                 </div>
 
-                <span className="absolute top-4 left-4 bg-amber-500 text-slate-950 px-3 py-1 rounded-full text-xs font-black shadow-lg">
+                <span className="absolute top-4 left-4 bg-amber-500 text-slate-950 px-3 py-1 rounded-full text-xs font-black shadow-lg z-10">
                   بعد التركيب ✨
                 </span>
 
                 {/* Slider Handle Divider */}
                 <div 
-                  className="absolute top-0 bottom-0 w-1 bg-white shadow-2xl pointer-events-none"
+                  className="absolute top-0 bottom-0 w-1 bg-white shadow-2xl pointer-events-none z-20"
                   style={{ left: `${testSliderPos}%` }}
                 >
                   <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-8 h-8 bg-white text-slate-900 rounded-full shadow-2xl flex items-center justify-center border-2 border-amber-500">
