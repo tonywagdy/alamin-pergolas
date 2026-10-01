@@ -62,7 +62,7 @@ export const Services: React.FC = () => {
     <section id="services" className="py-24 bg-white overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <span className="inline-block text-xs sm:text-sm font-bold text-[#f39c12] uppercase tracking-widest mb-3 bg-amber-50 px-4 py-1.5 rounded-full">
+          <span className="inline-block text-xs sm:text-sm font-bold text-amber-800 uppercase tracking-widest mb-3 bg-amber-100/80 border border-amber-200/60 px-4 py-1.5 rounded-full">
             إيه اللي بنقدمه؟
           </span>
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-[#143d6a]">

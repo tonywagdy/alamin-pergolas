@@ -1,11 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { 
-  getFirestore, 
-  initializeFirestore, 
-  persistentLocalCache, 
-  persistentMultipleTabManager 
-} from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
@@ -21,18 +16,29 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore with multi-tab offline persistence to drastically reduce read quota and support offline/quota-exceeded states
-let firestoreInstance: any;
-try {
-  firestoreInstance = initializeFirestore(app, {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager()
-    })
-  }, firebaseConfig.firestoreDatabaseId);
-} catch (e) {
-  firestoreInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-}
+// Initialize standard lightweight Firestore instance
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
-export const db = firestoreInstance;
-export const auth = getAuth(app);
-export const storage = getStorage(app);
+// Lazy Auth instance: Only initialized when /admin is accessed (prevents 93KiB auth/iframe.js from loading for public visitors)
+let _authInstance: any = null;
+export const auth: any = new Proxy({} as any, {
+  get(_target, prop) {
+    if (!_authInstance) {
+      _authInstance = getAuth(app);
+    }
+    const val = _authInstance[prop];
+    return typeof val === 'function' ? val.bind(_authInstance) : val;
+  }
+});
+
+// Lazy Storage instance: Only initialized when upload/storage methods are accessed
+let _storageInstance: any = null;
+export const storage: any = new Proxy({} as any, {
+  get(_target, prop) {
+    if (!_storageInstance) {
+      _storageInstance = getStorage(app);
+    }
+    const val = _storageInstance[prop];
+    return typeof val === 'function' ? val.bind(_storageInstance) : val;
+  }
+});

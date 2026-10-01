@@ -67,10 +67,24 @@ export const BeforeAfter: React.FC = () => {
       }
     };
 
-    fetchBeforeAfter();
+    // Defer network call to idle time so it never competes with initial paint or LCP
+    let timer: any = null;
+    let idleId: any = null;
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = (window as any).requestIdleCallback(() => {
+        fetchBeforeAfter();
+      }, { timeout: 3500 });
+    } else {
+      timer = setTimeout(fetchBeforeAfter, 2500);
+    }
 
     return () => {
       isMounted = false;
+      if (idleId && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleId);
+      }
+      if (timer) clearTimeout(timer);
     };
   }, []);
 
@@ -117,7 +131,7 @@ export const BeforeAfter: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center mb-14">
-          <span className="inline-block text-xs sm:text-sm font-bold text-[#f39c12] uppercase tracking-widest mb-3 bg-amber-50 px-4 py-1.5 rounded-full">
+          <span className="inline-block text-xs sm:text-sm font-bold text-amber-800 uppercase tracking-widest mb-3 bg-amber-100/80 border border-amber-200/60 px-4 py-1.5 rounded-full">
             شاهد التحول بنفسك
           </span>
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-[#143d6a]">
@@ -147,8 +161,8 @@ export const BeforeAfter: React.FC = () => {
             className="relative aspect-[16/10] sm:aspect-[16/9] w-full rounded-3xl overflow-hidden shadow-2xl select-none border-4 border-slate-100 bg-slate-900 cursor-ew-resize touch-none focus:outline-none focus:ring-4 focus:ring-[#f39c12]/30"
           >
             {/* 1. Permanent Badges (Always Visible on both sides) */}
-            {/* Left side: AFTER (Orange Brand Color) */}
-            <div className="absolute top-4 left-4 z-20 bg-[#f39c12] text-white font-extrabold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-lg border border-white/20 flex items-center gap-1.5 pointer-events-none">
+            {/* Left side: AFTER (High contrast amber-600) */}
+            <div className="absolute top-4 left-4 z-20 bg-amber-600 text-white font-extrabold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-lg border border-white/20 flex items-center gap-1.5 pointer-events-none">
               <Sparkles size={15} />
               <span>بعد التركيب</span>
             </div>

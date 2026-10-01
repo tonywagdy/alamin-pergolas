@@ -76,7 +76,7 @@ export const About: React.FC = () => {
             transition={{ duration: 0.7 }}
             className="text-right order-1 lg:order-2"
           >
-            <span className="inline-block text-xs sm:text-sm font-bold text-[#f39c12] uppercase tracking-widest mb-3 bg-amber-50 px-4 py-1.5 rounded-full">
+            <span className="inline-block text-xs sm:text-sm font-bold text-amber-800 uppercase tracking-widest mb-3 bg-amber-100/80 border border-amber-200/60 px-4 py-1.5 rounded-full">
               إحنا مين؟
             </span>
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-[#143d6a] mb-6 leading-tight">

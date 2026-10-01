@@ -12,7 +12,7 @@ import {
   saveLocalOrder, 
   getLocalDeletedStaticIds, 
   saveLocalDeletedStaticIds 
-} from '../utils/gallerySync';
+} from '../utils/galleryStorage';
 
 const CATEGORIES = [
   "الكل",
@@ -92,12 +92,24 @@ export const Gallery: React.FC = () => {
       }
     };
 
-    // Defer network call until after initial paint
-    const timer = setTimeout(loadGalleryData, 200);
+    // Defer network call to idle time so it never competes with initial paint or LCP
+    let timer: any = null;
+    let idleId: any = null;
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = (window as any).requestIdleCallback(() => {
+        loadGalleryData();
+      }, { timeout: 3500 });
+    } else {
+      timer = setTimeout(loadGalleryData, 2500);
+    }
 
     return () => {
       isMounted = false;
-      clearTimeout(timer);
+      if (idleId && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleId);
+      }
+      if (timer) clearTimeout(timer);
     };
   }, []);
 
@@ -167,7 +179,7 @@ export const Gallery: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-6">
           <div className="text-right">
-            <span className="inline-block text-xs sm:text-sm font-bold text-[#f39c12] uppercase tracking-widest mb-3 bg-amber-50 px-4 py-1.5 rounded-full">
+            <span className="inline-block text-xs sm:text-sm font-bold text-amber-800 uppercase tracking-widest mb-3 bg-amber-100/80 border border-amber-200/60 px-4 py-1.5 rounded-full">
               معرض الصور الحصري
             </span>
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-[#143d6a]">

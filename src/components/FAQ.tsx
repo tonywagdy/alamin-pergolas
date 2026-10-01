@@ -14,7 +14,7 @@ export const FAQ: React.FC = () => {
     <section id="faq" className="py-24 bg-slate-50 overflow-hidden border-b border-slate-200/60">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <span className="inline-block text-xs sm:text-sm font-bold text-[#f39c12] uppercase tracking-widest mb-3 bg-amber-50 px-4 py-1.5 rounded-full">
+          <span className="inline-block text-xs sm:text-sm font-bold text-amber-800 uppercase tracking-widest mb-3 bg-amber-100/80 border border-amber-200/60 px-4 py-1.5 rounded-full">
             إجابات واضحة
           </span>
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-[#143d6a]">
