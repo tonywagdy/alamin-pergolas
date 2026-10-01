@@ -203,9 +203,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     initializeGallerySync();
     const unsubSync = subscribeToSyncState(setSyncState);
     const unsubGalleryLocal = subscribeToGalleryUpdates((updatedList) => {
-      resolveProjectsImages(updatedList).then(setFirestoreProjects);
+      setFirestoreProjects(updatedList);
     });
-    resolveProjectsImages(getLocalGallery()).then(setFirestoreProjects);
+    setFirestoreProjects(getLocalGallery());
 
     return () => {
       unsubscribe();
@@ -260,6 +260,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
           ...data,
           isFirestore: true,
           syncStatus: 'synced',
+          image: data.image || '',
           order: typeof data.order === 'number' ? data.order : undefined
         };
       });
@@ -268,11 +269,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       const localItems = getLocalGallery();
       const reconciled = reconcileGalleryItems(remoteItems, localItems);
       saveLocalGallery(reconciled);
-      resolveProjectsImages(reconciled).then(setFirestoreProjects);
+      setFirestoreProjects(reconciled);
     }, (err) => {
       console.warn("[Gallery] Firestore listener notice (quota or offline - preserving local):", err);
-      // NEVER CLEAR local state on quota error or offline!
-      resolveProjectsImages(getLocalGallery()).then(setFirestoreProjects);
+      setFirestoreProjects(getLocalGallery());
     });
 
     // 3. Deleted static items listener
@@ -631,6 +631,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     } finally {
       setIsUploading(false);
       setUploadStatusText('');
+    }
+  };
+
+  const handleManualSync = async () => {
+    try {
+      showToast("جاري المزامنة ورفع الصور للسيرفر السحابي الآن...", "success");
+      await runSyncQueue(true);
+      showToast("تمت مزامنة وحفظ جميع الصور في السيرفر بنجاح!", "success");
+    } catch (err: any) {
+      showToast(`فشلت المزامنة: ${err?.message || 'يرجى المحاولة مجدداً'}`, "error");
     }
   };
 
@@ -1916,7 +1926,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                 {syncState.pendingCount > 0 && (
                   <button
                     type="button"
-                    onClick={() => runSyncQueue()}
+                    onClick={handleManualSync}
                     disabled={syncState.isSyncing}
                     className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
                   >

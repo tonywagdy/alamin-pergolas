@@ -10,9 +10,8 @@
  * 6. Resilience: Quota errors (RESOURCE_EXHAUSTED) or offline states NEVER discard local data.
  */
 
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { db, storage } from '../firebase';
+import { db } from '../firebase';
 import { Project, SyncStatus, ActivityLogItem } from '../types';
 
 // ============================================================================
@@ -236,19 +235,18 @@ export function getLocalGallery(): Project[] {
 
 export function saveLocalGallery(projects: Project[]): void {
   try {
-    // Sanitize: Do not store large base64 strings in localStorage!
-    // Store metadata only. If an item has a localBlobId, blob is safely in IndexedDB.
-    const sanitized = projects.map(p => {
-      const copy = { ...p };
-      if (typeof copy.image === 'string' && copy.image.startsWith('data:')) {
-        // Avoid localStorage quota crash
-        copy.image = copy.downloadUrl || '';
-      }
-      return copy;
-    });
-    localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(sanitized));
+    localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(projects));
   } catch (err) {
-    console.warn('[Gallery] Save local gallery notice:', err);
+    // If browser localStorage quota (5MB) is reached, save metadata without heavy base64 strings
+    try {
+      const slim = projects.map(p => ({
+        ...p,
+        image: typeof p.image === 'string' && p.image.startsWith('data:') ? '' : p.image
+      }));
+      localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(slim));
+    } catch (e) {
+      console.warn('[Gallery] LocalStorage quota fallback error:', e);
+    }
   }
 }
 
@@ -374,23 +372,23 @@ function saveActivityQueue(queue: PendingActivityTask[]): void {
 
 export async function resolveProjectImage(project: Project): Promise<string> {
   // 1. If it's a permanent HTTP/HTTPS URL, return it directly
-  if (typeof project.image === 'string' && (project.image.startsWith('http://') || project.image.startsWith('https://'))) {
+  if (typeof project.image === 'string' && (project.image.startsWith('http://') || project.image.startsWith('https://') || project.image.startsWith('./') || project.image.startsWith('/'))) {
     return project.image;
   }
   if (project.downloadUrl && (project.downloadUrl.startsWith('http://') || project.downloadUrl.startsWith('https://'))) {
     return project.downloadUrl;
   }
 
-  // 2. If it has a localBlobId, resolve from IndexedDB
+  // 2. If image is a dataUrl, return it directly
+  if (typeof project.image === 'string' && project.image.startsWith('data:')) {
+    return project.image;
+  }
+
+  // 3. If it has a localBlobId, resolve from IndexedDB
   const blobId = project.localBlobId || (typeof project.id === 'string' && project.id.startsWith('proj_') ? project.id : null);
   if (blobId) {
     const resolved = await getBlobUrl(blobId);
     if (resolved) return resolved;
-  }
-
-  // 3. If image is a dataUrl, return it
-  if (typeof project.image === 'string' && project.image.startsWith('data:')) {
-    return project.image;
   }
 
   return project.image || '';
@@ -478,64 +476,75 @@ export async function enqueueNewUpload(params: {
 }): Promise<Project> {
   const localId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
   
-  // 1. Save compressed Blob to IndexedDB
+  // 1. Save compressed Blob to IndexedDB as permanent local backup
   await saveLocalBlob(localId, params.blob);
   console.log('[Gallery] Local save completed in IndexedDB for blob:', localId);
 
-  // 2. Generate in-memory Object URL for instant preview
-  const liveUrl = await getBlobUrl(localId, params.blob) || '';
+  // 2. Convert blob to high-efficiency Data URL
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(params.blob);
+  });
 
-  // 3. Construct local project item with pending state
+  // 3. Construct local project item
   const newProject: Project = {
     id: localId,
     title: params.title.trim(),
     category: params.category,
-    image: liveUrl,
+    image: dataUrl,
     localBlobId: localId,
     isFirestore: true,
-    syncStatus: 'pending',
+    syncStatus: 'uploading',
     order: typeof params.order === 'number' ? params.order : 0,
     createdAt: new Date().toISOString(),
     retryCount: 0
   };
 
-  // 4. Update local gallery list
+  // 4. Update local gallery list and ordering immediately for 0ms UI response
   const currentList = getLocalGallery();
   const updatedList = [newProject, ...currentList.filter(p => p.id !== localId)];
   saveLocalGallery(updatedList);
+  notifyGalleryListeners(updatedList);
 
-  // 5. Update local master ordering
   const currentOrder = getLocalOrder();
-  const updatedOrder = [localId, ...currentOrder.filter(id => id !== localId)];
-  saveLocalOrder(updatedOrder);
+  saveLocalOrder([localId, ...currentOrder.filter(id => id !== localId)]);
 
-  // 6. Add task to upload queue
-  const uploadTask: PendingUploadTask = {
-    id: localId,
-    title: params.title.trim(),
-    category: params.category,
-    localBlobId: localId,
-    order: newProject.order || 0,
-    createdAt: newProject.createdAt,
-    retryCount: 0,
-    nextRetryTime: Date.now()
-  };
-  const uploadQueue = getUploadQueue();
-  // Prevent duplicate upload tasks
-  if (!uploadQueue.some(t => t.id === localId)) {
-    saveUploadQueue([uploadTask, ...uploadQueue]);
+  // 5. Save directly to Firestore collection 'gallery'
+  try {
+    await setDoc(doc(db, 'gallery', localId), {
+      title: params.title.trim(),
+      category: params.category,
+      image: dataUrl,
+      order: newProject.order || 0,
+      createdAt: serverTimestamp()
+    });
+
+    newProject.syncStatus = 'synced';
+    const syncedList = getLocalGallery().map(p => p.id === localId ? { ...p, syncStatus: 'synced' as SyncStatus } : p);
+    saveLocalGallery(syncedList);
+    notifyGalleryListeners(syncedList);
+    console.log('[Gallery] Direct upload to Firestore succeeded for:', localId);
+  } catch (cloudErr: any) {
+    console.warn('[Gallery] Direct upload failed, keeping in offline retry queue:', cloudErr);
+    newProject.syncStatus = 'pending';
+    const uploadTask: PendingUploadTask = {
+      id: localId,
+      title: params.title.trim(),
+      category: params.category,
+      localBlobId: localId,
+      order: newProject.order || 0,
+      createdAt: newProject.createdAt,
+      retryCount: 0,
+      nextRetryTime: Date.now() + 5000
+    };
+    saveUploadQueue([uploadTask, ...getUploadQueue().filter(t => t.id !== localId)]);
+    notifySyncListeners();
   }
 
-  // 7. Log activity locally
+  // 6. Log activity
   enqueueLocalActivity('gallery', `إضافة مشروع جديد للمعرض: "${params.title.trim()}" في تصنيف "${params.category}"`);
-
-  notifyGalleryListeners(updatedList);
-  notifySyncListeners();
-
-  // 8. Trigger background worker
-  setTimeout(() => {
-    runSyncQueue();
-  }, 100);
 
   return newProject;
 }
@@ -684,12 +693,16 @@ export function enqueueLocalActivity(
 // 7. BACKGROUND SYNC WORKER
 // ============================================================================
 
-export async function runSyncQueue(): Promise<void> {
-  if (isSyncRunning) return;
+export async function runSyncQueue(force: boolean = false): Promise<void> {
+  if (force) {
+    isSyncRunning = false;
+  } else if (isSyncRunning) {
+    return;
+  }
   isSyncRunning = true;
   notifySyncListeners();
 
-  console.log('[Gallery] Sync started');
+  console.log('[Gallery] Sync started (force = ' + force + ')');
 
   try {
     // -------------------------------------------------------------
@@ -699,12 +712,12 @@ export async function runSyncQueue(): Promise<void> {
     const remainingUploads: PendingUploadTask[] = [];
 
     for (const task of uploadQueue) {
-      if (Date.now() < task.nextRetryTime) {
+      if (!force && Date.now() < task.nextRetryTime) {
         remainingUploads.push(task);
         continue;
       }
 
-      console.log(`[Gallery] Upload started for task: ${task.id} (attempt #${task.retryCount + 1})`);
+      console.log(`[Gallery] Uploading task: ${task.id} (attempt #${task.retryCount + 1})`);
 
       try {
         // Mark as uploading in local gallery
@@ -715,37 +728,33 @@ export async function runSyncQueue(): Promise<void> {
         saveLocalGallery(updatedWithUploading);
         notifyGalleryListeners(updatedWithUploading);
 
-        // Get blob from IndexedDB
+        // Get blob from IndexedDB or retrieve existing data URL
+        let dataUrl = '';
         const blob = await getLocalBlob(task.localBlobId);
-        if (!blob) {
-          throw new Error('Local image blob not found in IndexedDB');
+        if (blob) {
+          dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        } else {
+          const found = currentGallery.find(p => p.id === task.id);
+          if (found && found.image && (found.image.startsWith('data:') || found.image.startsWith('http'))) {
+            dataUrl = found.image;
+          }
         }
 
-        // Upload to Firebase Storage with a 45-second timeout (resilient against slow connections)
-        const storagePath = `gallery/${task.id}_${Date.now()}.webp`;
-        const storageRef = ref(storage, storagePath);
+        if (!dataUrl) {
+          throw new Error('لم يتم العثور على بيانات الصورة في المتصفح');
+        }
 
-        const uploadPromise = (async () => {
-          const res = await uploadBytes(storageRef, blob, {
-            contentType: 'image/webp',
-            cacheControl: 'public, max-age=31536000'
-          });
-          return await getDownloadURL(res.ref);
-        })();
-
-        const timeoutPromise = new Promise<string>((_, reject) =>
-          setTimeout(() => reject(new Error('Firebase Storage upload timeout (45s)')), 45000)
-        );
-
-        const downloadUrl = await Promise.race([uploadPromise, timeoutPromise]);
-
-        // Write metadata to Firestore using deterministic Document ID (prevents duplicate documents!)
+        // Write directly to Firestore collection 'gallery'
         await setDoc(doc(db, 'gallery', task.id), {
           title: task.title,
           category: task.category,
-          image: downloadUrl,
-          order: task.order,
-          firebaseStoragePath: storagePath,
+          image: dataUrl,
+          order: typeof task.order === 'number' ? task.order : 0,
           createdAt: serverTimestamp()
         }, { merge: true });
 
@@ -754,9 +763,7 @@ export async function runSyncQueue(): Promise<void> {
           if (p.id === task.id) {
             return {
               ...p,
-              image: downloadUrl,
-              downloadUrl,
-              firebaseStoragePath: storagePath,
+              image: dataUrl,
               syncStatus: 'synced' as SyncStatus,
               retryCount: 0,
               lastError: undefined
@@ -767,24 +774,16 @@ export async function runSyncQueue(): Promise<void> {
         saveLocalGallery(syncedGallery);
         notifyGalleryListeners(syncedGallery);
 
-        console.log(`[Gallery] Upload succeeded for project: ${task.id}`);
+        console.log(`[Gallery] Cloud sync succeeded for project: ${task.id}`);
       } catch (err: any) {
-        const errorMsg = err?.message || 'Storage/Firestore error';
-        const isQuota = errorMsg.includes('quota') || errorMsg.includes('resource-exhausted') || err?.code === 'resource-exhausted';
-
-        if (isQuota) {
-          console.warn('[Gallery] Firestore quota exceeded. Upload retained locally in retry queue.');
-          lastSyncError = 'تم بلوغ حد الكوتا اليومي - الصور محفوظة محلياً بأمان وسيتم رفعها تلقائياً';
-        } else {
-          console.warn(`[Gallery] Upload failed for ${task.id}:`, errorMsg);
-          lastSyncError = errorMsg;
-        }
+        const errorMsg = err?.message || 'Firestore sync error';
+        console.warn(`[Gallery] Upload retry failed for ${task.id}:`, errorMsg);
+        lastSyncError = errorMsg;
 
         const newRetryCount = task.retryCount + 1;
         const backoffMs = getBackoffDelay(newRetryCount);
-        const nextRetry = Date.now() + backoffMs;
+        const nextRetry = Date.now() + (force ? 0 : backoffMs);
 
-        // If exceeded max retries, mark as failed but keep in queue for online/manual sync
         const newStatus: SyncStatus = newRetryCount >= 5 ? 'failed' : 'pending';
 
         const updatedGallery = getLocalGallery().map(p => {
@@ -807,8 +806,6 @@ export async function runSyncQueue(): Promise<void> {
           nextRetryTime: nextRetry,
           lastError: errorMsg
         });
-
-        console.log(`[Gallery] Queued for retry in ${backoffMs / 1000}s`);
       }
     }
 
@@ -853,11 +850,6 @@ export async function runSyncQueue(): Promise<void> {
 
       try {
         if (task.isFirestore) {
-          if (task.storagePath) {
-            try {
-              await deleteObject(ref(storage, task.storagePath));
-            } catch (e) {}
-          }
           await deleteDoc(doc(db, 'gallery', String(task.id)));
         } else {
           await setDoc(doc(db, 'deleted_static_images', String(task.id)), {
