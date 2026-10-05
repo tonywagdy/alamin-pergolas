@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { ArrowLeftRight, Sparkles } from 'lucide-react';
 import { BEFORE_AFTER_ITEMS } from '../data';
 import { db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 
 export const BeforeAfter: React.FC = () => {
   const [sliderPosition, setSliderPosition] = useState<number>(50);
@@ -28,11 +28,10 @@ export const BeforeAfter: React.FC = () => {
     return BEFORE_AFTER_ITEMS[0];
   });
 
-  // Single lightweight fetch with timeout (conserves Firestore quota, prevents infinite listeners)
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Fetch from persistent server API immediately (0 quota limit, instant response)
+    // 1. Fetch from persistent server API immediately (0ms delay, instant response)
     fetch('/api/before-after')
       .then(r => r.json())
       .then(res => {
@@ -41,6 +40,7 @@ export const BeforeAfter: React.FC = () => {
             const updated = {
               ...prev,
               title: res.data.title || prev.title,
+              description: res.data.description || prev.description,
               beforeImage: res.data.beforeImage,
               afterImage: res.data.afterImage,
               aspectRatio: res.data.aspectRatio || '4/3',
@@ -55,61 +55,38 @@ export const BeforeAfter: React.FC = () => {
       })
       .catch(() => {});
 
-    const fetchBeforeAfter = async () => {
-      try {
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('BeforeAfter fetch timeout')), 3500)
-        );
-
-        const fetchPromise = getDoc(doc(db, 'before_after', 'main'));
-        const snapshot = (await Promise.race([fetchPromise, timeoutPromise])) as any;
-
-        if (isMounted && snapshot && snapshot.exists()) {
-          const data = snapshot.data();
-          if (data) {
-            setCurrentItem(prev => {
-              const updated = {
-                ...prev,
-                title: data.title || prev.title,
-                description: data.description || prev.description,
-                location: data.location || prev.location,
-                beforeImage: data.beforeImage || prev.beforeImage,
-                afterImage: data.afterImage || prev.afterImage,
-                aspectRatio: data.aspectRatio || (prev as any).aspectRatio || '4/3',
-                fitMode: data.fitMode || (prev as any).fitMode || 'contain'
-              };
-              try {
-                localStorage.setItem('alamin_before_after', JSON.stringify(updated));
-              } catch (err) {}
-              return updated;
-            });
-          }
-        }
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.warn("[Public] Before-after fetch fallback to cached/curated:", error);
+    // 2. Real-time Firestore listener: updates across all devices instantly
+    const unsub = onSnapshot(doc(db, 'before_after', 'main'), (snapshot) => {
+      if (isMounted && snapshot && snapshot.exists()) {
+        const data = snapshot.data();
+        if (data && data.beforeImage && data.afterImage) {
+          setCurrentItem(prev => {
+            const updated = {
+              ...prev,
+              title: data.title || prev.title,
+              description: data.description || prev.description,
+              location: data.location || prev.location,
+              beforeImage: data.beforeImage || prev.beforeImage,
+              afterImage: data.afterImage || prev.afterImage,
+              aspectRatio: data.aspectRatio || (prev as any).aspectRatio || '4/3',
+              fitMode: data.fitMode || (prev as any).fitMode || 'contain'
+            };
+            try {
+              localStorage.setItem('alamin_before_after', JSON.stringify(updated));
+            } catch (err) {}
+            return updated;
+          });
         }
       }
-    };
-
-    // Defer network call to idle time so it never competes with initial paint or LCP
-    let timer: any = null;
-    let idleId: any = null;
-
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleId = (window as any).requestIdleCallback(() => {
-        fetchBeforeAfter();
-      }, { timeout: 3500 });
-    } else {
-      timer = setTimeout(fetchBeforeAfter, 2500);
-    }
+    }, (err) => {
+      if (import.meta.env.DEV) {
+        console.warn("[Public] Before-after listener notice (using server cache):", err);
+      }
+    });
 
     return () => {
       isMounted = false;
-      if (idleId && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-        (window as any).cancelIdleCallback(idleId);
-      }
-      if (timer) clearTimeout(timer);
+      unsub();
     };
   }, []);
 

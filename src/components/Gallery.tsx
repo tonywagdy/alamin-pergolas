@@ -69,11 +69,11 @@ export const Gallery: React.FC = () => {
       })
       .catch(() => {});
 
-    // Single lightweight fetch with timeout (deferred so it never competes with initial paint)
+    // Load gallery data from Firestore (with resilient timeout)
     const loadGalleryData = async () => {
       try {
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Public Gallery fetch timeout')), 4000)
+          setTimeout(() => reject(new Error('Public Gallery fetch timeout')), 15000)
         );
 
         const fetchAllPromise = Promise.all([
@@ -132,24 +132,11 @@ export const Gallery: React.FC = () => {
       }
     };
 
-    // Defer network call to idle time so it never competes with initial paint or LCP
-    let timer: any = null;
-    let idleId: any = null;
-
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleId = (window as any).requestIdleCallback(() => {
-        loadGalleryData();
-      }, { timeout: 3500 });
-    } else {
-      timer = setTimeout(loadGalleryData, 2500);
-    }
+    // Load immediately so visitors on any device see all new photos without delay
+    loadGalleryData();
 
     return () => {
       isMounted = false;
-      if (idleId && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-        (window as any).cancelIdleCallback(idleId);
-      }
-      if (timer) clearTimeout(timer);
     };
   }, []);
 

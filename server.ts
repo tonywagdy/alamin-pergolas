@@ -286,7 +286,66 @@ async function startServer() {
 
   app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`[Server] Alamin Pergolas running at http://0.0.0.0:${PORT} (mode: ${isProd ? 'production' : 'development'})`);
+    // Non-blocking background sync from Cloud Firestore
+    syncFromCloudFirestore();
   });
+}
+
+async function syncFromCloudFirestore() {
+  try {
+    const { initializeApp, getApps } = await import('firebase/app');
+    const { getFirestore, collection, getDocs, doc, getDoc } = await import('firebase/firestore');
+
+    const firebaseConfig = {
+      projectId: 'gen-lang-client-0718695041',
+      appId: '1:764560451576:web:3c21174569dcc275e5d80d',
+      apiKey: 'AIzaSyDtB9Wgt5VVWvVaCfzu0YxKmtLCxrLM-a8',
+      authDomain: 'gen-lang-client-0718695041.firebaseapp.com',
+      firestoreDatabaseId: 'ai-studio-c9dea870-1bc9-4dc9-9cf3-99089ddb6a4a'
+    };
+
+    const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
+    const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+    // Sync Gallery if available
+    const galSnap = await getDocs(collection(db, 'gallery'));
+    if (galSnap.docs.length > 0) {
+      const items = galSnap.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        isFirestore: true,
+        syncStatus: 'synced',
+        order: typeof d.data().order === 'number' ? d.data().order : 0
+      }));
+      writeJsonFile(GALLERY_FILE, items);
+      console.log(`[Server] Synced ${items.length} gallery items from Cloud Firestore`);
+    }
+
+    // Sync Before & After
+    const baSnap = await getDoc(doc(db, 'before_after', 'main'));
+    if (baSnap.exists()) {
+      writeJsonFile(BEFORE_AFTER_FILE, baSnap.data());
+      console.log('[Server] Synced Before & After from Cloud Firestore');
+    }
+
+    // Sync Order
+    const orderSnap = await getDoc(doc(db, 'gallery_order', 'main'));
+    if (orderSnap.exists()) {
+      const d = orderSnap.data();
+      if (Array.isArray(d.orderIds)) {
+        writeJsonFile(ORDER_FILE, d.orderIds);
+      }
+    }
+
+    // Sync Deleted Static
+    const delSnap = await getDocs(collection(db, 'deleted_static_images'));
+    if (delSnap.docs.length > 0) {
+      const ids = delSnap.docs.map(d => Number(d.id));
+      writeJsonFile(DELETED_STATIC_FILE, ids);
+    }
+  } catch (err: any) {
+    console.warn('[Server] Background sync notice (using local disk cache):', err.message);
+  }
 }
 
 startServer().catch((err) => {
