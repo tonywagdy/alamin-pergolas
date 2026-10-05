@@ -13,6 +13,7 @@ import {
   getLocalDeletedStaticIds, 
   saveLocalDeletedStaticIds 
 } from '../utils/galleryStorage';
+import { resolveProjectsImages } from '../utils/gallerySync';
 
 const CATEGORIES = [
   "الكل",
@@ -32,6 +33,41 @@ export const Gallery: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true;
+
+    // 1. Fetch from persistent server API immediately (0 quota limit, instant response)
+    fetch('/api/gallery')
+      .then(r => r.json())
+      .then(res => {
+        if (isMounted && res.success && Array.isArray(res.items) && res.items.length > 0) {
+          resolveProjectsImages(res.items).then(resolved => {
+            if (isMounted) {
+              setFirestoreProjects(resolved);
+              saveLocalGallery(resolved);
+            }
+          });
+        }
+      })
+      .catch(() => {});
+
+    fetch('/api/order')
+      .then(r => r.json())
+      .then(res => {
+        if (isMounted && res.success && Array.isArray(res.orderIds) && res.orderIds.length > 0) {
+          setCustomOrderIds(res.orderIds);
+          saveLocalOrder(res.orderIds);
+        }
+      })
+      .catch(() => {});
+
+    fetch('/api/deleted-static')
+      .then(r => r.json())
+      .then(res => {
+        if (isMounted && res.success && Array.isArray(res.ids)) {
+          setDeletedStaticIds(res.ids);
+          saveLocalDeletedStaticIds(res.ids);
+        }
+      })
+      .catch(() => {});
 
     // Single lightweight fetch with timeout (deferred so it never competes with initial paint)
     const loadGalleryData = async () => {
@@ -66,8 +102,12 @@ export const Gallery: React.FC = () => {
             };
           });
 
-          setFirestoreProjects(items);
-          saveLocalGallery(items);
+          resolveProjectsImages(items).then(resolved => {
+            if (isMounted) {
+              setFirestoreProjects(resolved);
+              saveLocalGallery(resolved);
+            }
+          });
         }
 
         // 2. Process Deleted Static Images

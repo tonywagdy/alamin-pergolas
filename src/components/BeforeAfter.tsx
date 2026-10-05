@@ -32,6 +32,29 @@ export const BeforeAfter: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
 
+    // 1. Fetch from persistent server API immediately (0 quota limit, instant response)
+    fetch('/api/before-after')
+      .then(r => r.json())
+      .then(res => {
+        if (isMounted && res.success && res.data && res.data.beforeImage && res.data.afterImage) {
+          setCurrentItem(prev => {
+            const updated = {
+              ...prev,
+              title: res.data.title || prev.title,
+              beforeImage: res.data.beforeImage,
+              afterImage: res.data.afterImage,
+              aspectRatio: res.data.aspectRatio || '4/3',
+              fitMode: res.data.fitMode || 'contain'
+            };
+            try {
+              localStorage.setItem('alamin_before_after', JSON.stringify(updated));
+            } catch (err) {}
+            return updated;
+          });
+        }
+      })
+      .catch(() => {});
+
     const fetchBeforeAfter = async () => {
       try {
         const timeoutPromise = new Promise((_, reject) => 

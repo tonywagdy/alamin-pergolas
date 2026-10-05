@@ -379,13 +379,13 @@ export async function resolveProjectImage(project: Project): Promise<string> {
     return project.downloadUrl;
   }
 
-  // 2. If image is a dataUrl, return it directly
-  if (typeof project.image === 'string' && project.image.startsWith('data:')) {
+  // 2. If image is a dataUrl with content, return it directly
+  if (typeof project.image === 'string' && project.image.startsWith('data:') && project.image.length > 50) {
     return project.image;
   }
 
-  // 3. If it has a localBlobId, resolve from IndexedDB
-  const blobId = project.localBlobId || (typeof project.id === 'string' && project.id.startsWith('proj_') ? project.id : null);
+  // 3. ALWAYS check IndexedDB by localBlobId or id (prevents broken black boxes)
+  const blobId = project.localBlobId || (typeof project.id === 'string' ? project.id : null);
   if (blobId) {
     const resolved = await getBlobUrl(blobId);
     if (resolved) return resolved;
@@ -543,7 +543,27 @@ export async function enqueueNewUpload(params: {
     notifySyncListeners();
   }
 
-  // 6. Log activity
+  // 6. Persist to server backend API immediately and adopt clean disk URL
+  try {
+    fetch('/api/gallery', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newProject)
+    })
+      .then(r => r.json())
+      .then(res => {
+        if (res.success && res.item && res.item.image && res.item.image.startsWith('/uploads/')) {
+          newProject.image = res.item.image;
+          const current = getLocalGallery();
+          const updated = current.map(p => p.id === localId ? { ...p, image: res.item.image } : p);
+          saveLocalGallery(updated);
+          notifyGalleryListeners(updated);
+        }
+      })
+      .catch(() => {});
+  } catch (e) {}
+
+  // 7. Log activity
   enqueueLocalActivity('gallery', `إضافة مشروع جديد للمعرض: "${params.title.trim()}" في تصنيف "${params.category}"`);
 
   return newProject;
@@ -558,6 +578,14 @@ let reorderDebounceTimer: any = null;
 export function enqueueReorder(orderIds: string[]): void {
   // 1. Immediately update localStorage order
   saveLocalOrder(orderIds);
+
+  try {
+    fetch('/api/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderIds })
+    }).catch(() => {});
+  } catch (e) {}
 
   // 2. Coalescing: replace any pending reorder task with the latest orderIds
   saveReorderQueue({
@@ -592,6 +620,10 @@ export async function enqueueDelete(
   const target = currentList.find(p => String(p.id) === idStr);
   const updatedList = currentList.filter(p => String(p.id) !== idStr);
   saveLocalGallery(updatedList);
+
+  try {
+    fetch('/api/gallery/' + idStr, { method: 'DELETE' }).catch(() => {});
+  } catch (e) {}
 
   // 2. Remove from local order
   const currentOrder = getLocalOrder();

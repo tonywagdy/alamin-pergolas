@@ -201,13 +201,30 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       }
     });
 
+    const applyResolvedGallery = async (projects: Project[]) => {
+      const resolved = await resolveProjectsImages(projects);
+      setFirestoreProjects(resolved);
+    };
+
     // Initialize Local-First gallery sync & restore cached blobs
     initializeGallerySync();
     const unsubSync = subscribeToSyncState(setSyncState);
     const unsubGalleryLocal = subscribeToGalleryUpdates((updatedList) => {
-      setFirestoreProjects(updatedList);
+      applyResolvedGallery(updatedList);
     });
-    setFirestoreProjects(getLocalGallery());
+    applyResolvedGallery(getLocalGallery());
+
+    // Fetch from persistent server storage (immune to Firestore quota limit)
+    fetch('/api/gallery')
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.items) && data.items.length > 0) {
+          const merged = reconcileGalleryItems(data.items, getLocalGallery());
+          saveLocalGallery(merged);
+          applyResolvedGallery(merged);
+        }
+      })
+      .catch(() => {});
 
     return () => {
       unsubscribe();
@@ -219,6 +236,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   // Fetch data when authenticated
   useEffect(() => {
     if (!user) return;
+
+    const applyResolvedGallery = async (projects: Project[]) => {
+      const resolved = await resolveProjectsImages(projects);
+      setFirestoreProjects(resolved);
+    };
 
     // 1. Leads listener
     const qLeads = query(collection(db, 'leads'), orderBy('createdAt', 'desc'));
@@ -271,10 +293,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       const localItems = getLocalGallery();
       const reconciled = reconcileGalleryItems(remoteItems, localItems);
       saveLocalGallery(reconciled);
-      setFirestoreProjects(reconciled);
+      applyResolvedGallery(reconciled);
     }, (err) => {
       console.warn("[Gallery] Firestore listener notice (quota or offline - preserving local):", err);
-      setFirestoreProjects(getLocalGallery());
+      applyResolvedGallery(getLocalGallery());
     });
 
     // 3. Deleted static items listener
@@ -289,6 +311,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     });
 
     // 4. Before & After single listener (conserves Firestore reads)
+    // Fetch from persistent server API immediately
+    fetch('/api/before-after')
+      .then(r => r.json())
+      .then(res => {
+        if (res.success && res.data && !baDirtyRef.current) {
+          if (res.data.beforeImage) setBaBeforeImage(res.data.beforeImage);
+          if (res.data.afterImage) setBaAfterImage(res.data.afterImage);
+          if (res.data.title) setBaTitle(res.data.title);
+          if (res.data.aspectRatio) setBaAspectRatio(res.data.aspectRatio);
+          if (res.data.fitMode) setBaFitMode(res.data.fitMode);
+        }
+      })
+      .catch(() => {});
+
     const unsubBAMain = onSnapshot(doc(db, 'before_after', 'main'), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
@@ -312,7 +348,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
           }
         } catch (e) {}
       }
-    }, (err) => console.warn("BA main fetch error:", err));
+    }, (err) => {
+      console.warn("BA main fetch notice (using server cache):", err);
+    });
 
     // 5. Activity log listener
     const qActivity = collection(db, 'activity_log');
@@ -740,50 +778,43 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       const beforeBlob = baBeforeBlob || beforeCompressed.blob;
       const afterBlob = baAfterBlob || afterCompressed.blob;
 
-      // 2. Upload to Firebase Storage if available (provides instant CDN URL)
-      if (storage) {
-        try {
-          const uploadTasks: Promise<void>[] = [];
-          if (beforeBlob && beforeBlob.size > 0 && finalBefore.startsWith('data:')) {
-            uploadTasks.push((async () => {
-              const storageRef = ref(storage, `before_after/before_${Date.now()}.webp`);
-              const res = await uploadBytes(storageRef, beforeBlob);
-              finalBefore = await getDownloadURL(res.ref);
-            })());
-          }
-          if (afterBlob && afterBlob.size > 0 && finalAfter.startsWith('data:')) {
-            uploadTasks.push((async () => {
-              const storageRef = ref(storage, `before_after/after_${Date.now()}.webp`);
-              const res = await uploadBytes(storageRef, afterBlob);
-              finalAfter = await getDownloadURL(res.ref);
-            })());
-          }
-
-          if (uploadTasks.length > 0) {
-            await Promise.race([
-              Promise.all(uploadTasks),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Storage upload timeout')), 3500))
-            ]);
-          }
-        } catch (storageErr) {
-          console.warn("Storage upload notice (falling back directly to Firestore):", storageErr);
-        }
-      }
-
       const cleanTitle = baTitle.trim() || BEFORE_AFTER_ITEMS[0].title;
 
-      // 3. Save to Firestore main document (primary source of truth)
-      await setDoc(doc(db, 'before_after', 'main'), {
-        beforeImage: finalBefore,
-        afterImage: finalAfter,
-        title: cleanTitle,
-        aspectRatio: baAspectRatio,
-        fitMode: baFitMode,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-
-      // Sync sub-documents for redundancy and high-speed multi-device delivery
+      // 2. Save to persistent server API (reliable across devices, 0 quota limit)
       try {
+        const apiRes = await fetch('/api/before-after', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            beforeImage: finalBefore,
+            afterImage: finalAfter,
+            title: cleanTitle,
+            aspectRatio: baAspectRatio,
+            fitMode: baFitMode,
+            updatedAt: new Date().toISOString()
+          })
+        });
+        const apiJson = await apiRes.json();
+        if (apiJson.success && apiJson.data) {
+          if (apiJson.data.beforeImage) finalBefore = apiJson.data.beforeImage;
+          if (apiJson.data.afterImage) finalAfter = apiJson.data.afterImage;
+        }
+      } catch (apiErr) {
+        console.warn("Server API Before/After save notice:", apiErr);
+      }
+
+      // 3. Save to Firestore (cloud sync fallback)
+      try {
+        await setDoc(doc(db, 'before_after', 'main'), {
+          beforeImage: finalBefore,
+          afterImage: finalAfter,
+          title: cleanTitle,
+          aspectRatio: baAspectRatio,
+          fitMode: baFitMode,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        // Sync sub-documents
         await Promise.all([
           setDoc(doc(db, 'before_after', 'before'), {
             image: finalBefore,
@@ -794,8 +825,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
             updatedAt: serverTimestamp()
           }, { merge: true })
         ]);
-      } catch (subErr) {
-        console.warn("Sub-doc sync notice:", subErr);
+      } catch (cloudErr) {
+        console.warn("Firestore save notice (quota limit or offline):", cloudErr);
       }
 
       // 4. Update local states & cache now that cloud Firestore is safely committed
