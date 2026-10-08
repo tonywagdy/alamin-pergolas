@@ -182,7 +182,7 @@ export const Contact: React.FC<{ initialService?: string }> = ({ initialService 
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4" aria-busy={isSubmitting}>
-                <div className="absolute -left-[10000px]" aria-hidden="true">
+                <div className="sr-only" aria-hidden="true">
                   <label htmlFor="company-website">الموقع الإلكتروني</label>
                   <input id="company-website" name="website" tabIndex={-1} autoComplete="off" value={website} onChange={e => setWebsite(e.target.value)} />
                 </div>
