@@ -1,4 +1,4 @@
-# Production readiness status — 2026-10-08
+# Production readiness status — 2026-10-09
 
 Production: https://www.alaminpergolas.com/
 
@@ -11,9 +11,10 @@ Production: https://www.alaminpergolas.com/
 - Mobile navigation spacing, short-screen menu scrolling, quote form padding and 16px mobile input text were improved. Physical phone testing remains outstanding.
 - Business owner confirmed free inspections throughout service areas. Warranty duration, coverage, exclusions and maintenance conditions are project-specific and written in the quotation before agreement.
 - Production Firestore rules were published and tested with a production quote submission.
+- Admin WhatsApp reply links normalize Egyptian phone numbers to international format, including Arabic/Persian digits.
 
 ## Outstanding or blocked
-- Firebase App Check is not enforced. Client integration awaits a production reCAPTCHA Enterprise site key and app registration. Google Cloud key-management page was unavailable in the working browser. Do not enable enforcement before live client token/lead/admin/gallery checks and terms approval.
+- Firestore App Check was registered with reCAPTCHA Enterprise and enabled as Enforced with the owner's explicit acceptance of the production warning. Production deployment dpl_RYEWj13rm8rx92dmgPxAjTVxHGbH contains the public site key. Twelve verified requests were visible in the last-hour metrics before enforcement. A new quote write and the admin dashboard succeeded immediately after enforcement, within Google's stated propagation period of up to 15 minutes; a post-propagation recheck remains outstanding. Authentication enforcement has not been enabled. Preview builds have no production attestation key and cannot access this Firestore project after enforcement.
 - Firebase Storage requires a billing upgrade; no upgrade was made. Existing Firestore image records remain in place. Storage rules and dormant Functions changes have not been deployed.
 - CSP remains report-only pending full network review.
 - PageSpeed API returned HTTP 429; no numeric performance score is asserted. Search Console has insufficient Core Web Vitals data.

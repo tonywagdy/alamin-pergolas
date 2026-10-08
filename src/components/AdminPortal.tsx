@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { normalizePhone } from '../utils/leads';
 import {
   Shield,
   ShieldCheck,
@@ -1419,7 +1420,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                 <div className="space-y-3">
                   {leads.slice(0, 5).map((lead, idx) => {
                     const waText = `أهلاً بك أستاذ ${lead.name}، شركة الأمين للبرجولات تتشرف بالتواصل معك بخصوص طلبك (${lead.service}).`;
-                    const waLink = `https://wa.me/${lead.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(waText)}`;
+                    const waLink = `https://wa.me/${normalizePhone(lead.phone).replace(/^0/, '20')}?text=${encodeURIComponent(waText)}`;
 
                     return (
                       <div
@@ -1636,7 +1637,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredLeads.map((lead) => {
                   const waReplyText = `أهلاً بك أستاذ ${lead.name}، معك م/ شركة الأمين للبرجولات بخصوص طلبك (${lead.service}). يشرفنا خدمتك وتحديد موعد المعاينة.`;
-                  const waUrl = `https://wa.me/${lead.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(waReplyText)}`;
+                  const waUrl = `https://wa.me/${normalizePhone(lead.phone).replace(/^0/, '20')}?text=${encodeURIComponent(waReplyText)}`;
 
                   return (
                     <div
