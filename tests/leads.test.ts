@@ -33,6 +33,8 @@ test('unconfigured or rejected measurement never loads a Google script or sends 
   (globalThis as any).window = { location: { pathname: '/' }, dispatchEvent: () => {} };
   (globalThis as any).document = { createElement: () => { throw Error('must not load tracking'); } };
   initializeMeasurement();
+  assert.equal(Object.prototype.toString.call((globalThis as any).window.dataLayer[0]), '[object Arguments]');
+  assert.equal((globalThis as any).window.dataLayer[0][0], 'consent');
   setConsent('denied');
   trackEvent('generate_lead', { lead_id: 'Abc123' });
   setConsent('granted');
