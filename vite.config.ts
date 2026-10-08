@@ -9,6 +9,11 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 function landingMetadata(): Plugin {
   return {
     name: 'landing-page-metadata',
+    transformIndexHtml(html) {
+      const items: { question: string; answer: string }[] = JSON.parse(readFileSync(path.join(directory, 'src/faq-items.json'), 'utf8'));
+      const schema = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: items.map(item => ({ '@type': 'Question', name: item.question, acceptedAnswer: { '@type': 'Answer', text: item.answer } })) };
+      return html.replace('<!-- FAQ_SCHEMA -->', `<script type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>`);
+    },
     closeBundle() {
       const html = readFileSync(path.join(directory, 'dist/index.html'), 'utf8');
       for (const page of [
