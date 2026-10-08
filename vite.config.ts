@@ -10,14 +10,7 @@ function landingMetadata(): Plugin {
   return {
     name: 'landing-page-metadata',
     closeBundle() {
-      // Inline the small application stylesheet to avoid a render-blocking network round trip.
-      // Google Fonts remains deferred; only Vite-generated local CSS is embedded.
-      const indexPath = path.join(directory, 'dist/index.html');
-      const html = readFileSync(indexPath, 'utf8').replace(
-        /<link\b[^>]*rel="stylesheet"[^>]*href="(\/assets\/[\w.-]+\.css)"[^>]*>/g,
-        (_tag, asset: string) => `<style>${readFileSync(path.join(directory, 'dist', asset.slice(1)), 'utf8')}</style>`
-      );
-      writeFileSync(indexPath, html);
+      const html = readFileSync(path.join(directory, 'dist/index.html'), 'utf8');
       for (const page of [
         { slug: 'roof-pergolas', title: 'برجولات روف وأسطح | تصميم وتنفيذ حسب المقاس | الأمين للبرجولات', description: 'تصميم وتنفيذ برجولات روف وأسطح بخشب معالج وخيارات تشطيب تناسب مساحتك. شاهد أعمالنا واطلب عرض سعر ومعاينة من الأمين للبرجولات.', image: 'input_file_1.webp' },
         { slug: 'garden-pergolas', title: 'برجولات حدائق وفلل | تصميم وتنفيذ حسب المقاس | الأمين للبرجولات', description: 'برجولات خشبية للحدائق والفلل بتصميم مناسب للمساحة والاستخدام. شاهد نماذج الأعمال واطلب عرض سعر ومعاينة من الأمين للبرجولات.', image: 'input_file_0.webp' }
