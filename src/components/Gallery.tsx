@@ -260,6 +260,8 @@ export const Gallery: React.FC<{ initialCategory?: string }> = ({ initialCategor
               >
                 <img
                   src={project.image}
+                  srcSet={project.image === '/input_file_1.webp' ? '/input_file_1-720.webp 720w, /input_file_1.webp 940w' : project.image === '/input_file_2.webp' ? '/input_file_2-720.webp 720w, /input_file_2-960.webp 960w, /input_file_2.webp 1280w' : undefined}
+                  sizes="(min-width: 1024px) 400px, (min-width: 640px) 50vw, 100vw"
                   alt={project.title}
                   width={400}
                   height={300}
