@@ -254,7 +254,7 @@ export const Contact: React.FC<{ initialService?: string }> = ({ initialService 
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full bg-[#f39c12] text-white py-4 rounded-xl font-bold text-base hover:bg-amber-600 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                  className="w-full bg-[#f39c12] text-[#143d6a] py-4 rounded-xl font-bold text-base hover:bg-amber-400 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                 >
                   {isSubmitting ? (
                     <span>جاري إرسال طلبك...</span>
