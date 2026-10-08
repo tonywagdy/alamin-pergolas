@@ -17,7 +17,8 @@ export const isMeasurementConfigured = /^G-[A-Z0-9]+$/.test(gaId) || /^AW-\d+$/.
 function gtag(): Gtag {
   const win = window as any;
   win.dataLayer ||= [];
-  win.gtag ||= (...args: any[]) => win.dataLayer.push(args);
+  // Google processes gtag commands as Arguments objects, not plain arrays.
+  win.gtag ||= function (..._args: any[]) { win.dataLayer.push(arguments); };
   return win.gtag;
 }
 
