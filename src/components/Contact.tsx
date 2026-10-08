@@ -259,8 +259,10 @@ export const Contact: React.FC<{ initialService?: string }> = ({ initialService 
                   {isSubmitting ? (
                     <span>جاري إرسال طلبك...</span>
                   ) : (
+                    <>
                       <Send size={18} />
                       <span>{awaitingConfirmation ? 'التحقق من الطلب' : 'إرسال طلب عرض سعر ومعاينة'}</span>
+                    </>
                   )}
                 </button>
 
