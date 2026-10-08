@@ -10,6 +10,7 @@ import { FAQ } from './components/FAQ';
 import { Contact } from './components/Contact';
 import { Footer } from './components/Footer';
 import { WhatsAppButton } from './components/WhatsAppButton';
+import { MeasurementConsent } from './components/MeasurementConsent';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Code-split AdminPortal so public visitors never download admin-only code
@@ -25,6 +26,8 @@ function AdminLoadingFallback() {
 }
 
 export default function App() {
+  const kind = window.location.pathname === '/roof-pergolas' ? 'roof' : window.location.pathname === '/garden-pergolas' ? 'garden' : undefined;
+
   const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => {
     const path = window.location.pathname;
     const hash = window.location.hash;
@@ -71,18 +74,19 @@ export default function App() {
     <ErrorBoundary>
       <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-[#f39c12] selection:text-white" dir="rtl">
         {/* Fixed Navigation */}
+        <a href="#main-content" className="skip-link">انتقل إلى المحتوى</a>
         <Navbar />
 
         {/* Main Sections with Semantic Flow */}
-        <main>
+        <main id="main-content">
           {/* 1. Hero Landing */}
-          <Hero />
+          <Hero kind={kind} />
 
           {/* 2. Core Services */}
-          <Services />
+          {!kind && <Services />}
 
           {/* 3. Real Gallery Showcase with Category Filters & Lightbox */}
-          <Gallery />
+          <Gallery initialCategory={kind === 'roof' ? 'برجولات روف' : kind === 'garden' ? 'برجولات حدائق' : 'الكل'} />
 
           {/* 5. Work Steps & Execution Methodology */}
           <WorkSteps />
@@ -97,7 +101,7 @@ export default function App() {
           <FAQ />
 
           {/* 10. Contact Section & Lead Generation Form */}
-          <Contact />
+          <Contact initialService={kind === 'roof' ? 'برجولة روف وأسطح' : 'برجولة حديقة وفلل'} />
         </main>
 
         {/* Clean Public Footer without any admin portal link */}
@@ -105,6 +109,7 @@ export default function App() {
 
         {/* Interactive Floating Customer Widgets (Clean Customer Experience) */}
         <WhatsAppButton />
+        <MeasurementConsent />
       </div>
     </ErrorBoundary>
   );

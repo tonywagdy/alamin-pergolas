@@ -35,6 +35,9 @@ export interface Lead {
   message: string;
   createdAt: any;
   status: 'new' | 'contacted' | 'closed';
+  city?: string;
+  privacyConsent?: boolean;
+  landingPage?: 'home' | 'roof' | 'garden';
 }
 
 export interface ActivityLogItem {

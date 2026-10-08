@@ -6,7 +6,7 @@
     <title>الأمين للبرجولات | تصميم وتنفيذ برجولات خشبية وحديدية في مصر</title>
     <meta name="description" content="شركة الأمين للبرجولات متخصصة في تصميم وتنفيذ أرقى البرجولات الخشبية والحديدية للحدائق والروفات، وأسقف معلقة وديكورات خشبية في مصر بأعلى جودة وضمان حقيقي على الجودة." />
     <meta name="keywords" content="برجولات خشبية, برجولات حدائق, برجولات روف, تصنيع برجولات مصر, خشب عزيزي, خشب موسكي, ديكورات خشبية, الأمين للبرجولات" />
-    <link rel="icon" type="image/png" href="/input_file_21.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#143d6a" />
@@ -23,7 +23,7 @@
     </noscript>
 
     <!-- Hero LCP Image Preload -->
-    <link rel="preload" as="image" href="./input_file_0.webp" fetchpriority="high" type="image/webp" />
+    <link rel="preload" as="image" href="/input_file_0.webp" fetchpriority="high" type="image/webp" />
 
     <!-- OpenGraph Metadata -->
     <meta property="og:site_name" content="الأمين للبرجولات" />
@@ -167,66 +167,9 @@
     }
     </script>
 
-    <!-- Google Analytics (GA4) - Deferred to never delay FCP or LCP -->
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      // Load GA4 script asynchronously only if a valid measurement ID is set
-      var gaMeasurementId = 'G-XXXXXXXXXX';
-      if (gaMeasurementId && gaMeasurementId !== 'G-XXXXXXXXXX') {
-        window.addEventListener('load', function() {
-          var s = document.createElement('script');
-          s.async = true;
-          s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaMeasurementId;
-          document.head.appendChild(s);
-          gtag('config', gaMeasurementId);
-        });
-      }
-    </script>
-
-    <script>
-      // Fix for "Cannot set property fetch of #<Window> which has only a getter"
-      (function() {
-        try {
-          var originalFetch = typeof window !== 'undefined' && window.fetch ? window.fetch.bind(window) : undefined;
-          var fetchGetter = function() { return originalFetch; };
-          var fetchSetter = function(fn) { originalFetch = fn; };
-
-          if (typeof Window !== 'undefined' && Window.prototype) {
-            try {
-              var desc = Object.getOwnPropertyDescriptor(Window.prototype, 'fetch');
-              if (!desc || !desc.set) {
-                Object.defineProperty(Window.prototype, 'fetch', {
-                  get: fetchGetter,
-                  set: fetchSetter,
-                  configurable: true,
-                  enumerable: true
-                });
-              }
-            } catch (_) {}
-          }
-
-          if (typeof window !== 'undefined') {
-            try {
-              var winDesc = Object.getOwnPropertyDescriptor(window, 'fetch');
-              if (!winDesc || !winDesc.set) {
-                Object.defineProperty(window, 'fetch', {
-                  get: fetchGetter,
-                  set: fetchSetter,
-                  configurable: true,
-                  enumerable: true
-                });
-              }
-            } catch (_) {}
-          }
-        } catch (e) {
-          // ignore
-        }
-      })();
-    </script>
   </head>
   <body>
+    <noscript><p dir="rtl">الأمين للبرجولات: تصميم وتنفيذ برجولات الحدائق والروف. للتواصل وطلب عرض سعر: <a href="tel:+201017919385">01017919385</a>. <a href="/privacy.html">سياسة الخصوصية</a></p></noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

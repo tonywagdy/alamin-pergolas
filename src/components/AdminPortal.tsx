@@ -1,28 +1,28 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Shield, 
-  ShieldCheck, 
-  ShieldAlert, 
-  Lock, 
-  LogIn, 
-  LogOut, 
-  ImagePlus, 
-  Upload, 
-  Users, 
-  Phone, 
-  MessageCircle, 
-  Trash2, 
-  CheckCircle2, 
-  Clock, 
-  Layers, 
-  Loader2, 
-  Sparkles, 
-  ArrowLeftRight, 
-  RotateCcw, 
-  ExternalLink, 
-  Search, 
-  Filter, 
+import {
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  Lock,
+  LogIn,
+  LogOut,
+  ImagePlus,
+  Upload,
+  Users,
+  Phone,
+  MessageCircle,
+  Trash2,
+  CheckCircle2,
+  Clock,
+  Layers,
+  Loader2,
+  Sparkles,
+  ArrowLeftRight,
+  RotateCcw,
+  ExternalLink,
+  Search,
+  Filter,
   RefreshCw,
   ArrowRight,
   Eye,
@@ -42,50 +42,50 @@ import {
   CloudOff
 } from 'lucide-react';
 import { compressImage, compressDataUrl, CompressionResult } from '../utils/imageCompressor';
-import { 
-  initializeGallerySync, 
-  subscribeToSyncState, 
-  subscribeToGalleryUpdates, 
-  getCurrentSyncState, 
-  resolveProjectsImages, 
-  enqueueNewUpload, 
-  enqueueReorder, 
-  enqueueDelete, 
-  enqueueLocalActivity, 
-  runSyncQueue, 
-  reconcileGalleryItems, 
-  getLocalGallery, 
+import {
+  initializeGallerySync,
+  subscribeToSyncState,
+  subscribeToGalleryUpdates,
+  getCurrentSyncState,
+  resolveProjectsImages,
+  enqueueNewUpload,
+  enqueueReorder,
+  enqueueDelete,
+  enqueueLocalActivity,
+  runSyncQueue,
+  reconcileGalleryItems,
+  getLocalGallery,
   saveLocalGallery,
-  getLocalOrder, 
+  getLocalOrder,
   saveLocalOrder,
-  getLocalDeletedStaticIds, 
+  getLocalDeletedStaticIds,
   saveLocalDeletedStaticIds,
-  getLocalActivities, 
+  getLocalActivities,
   saveLocalActivities,
   STORAGE_KEYS,
-  SyncState 
+  SyncState
 } from '../utils/gallerySync';
 import { db, auth, storage } from '../firebase';
-import { 
-  collection, 
-  addDoc, 
+import {
+  collection,
+  addDoc,
   setDoc,
-  serverTimestamp, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  updateDoc, 
-  deleteDoc, 
+  serverTimestamp,
+  onSnapshot,
+  query,
+  orderBy,
+  updateDoc,
+  deleteDoc,
   doc,
   writeBatch
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signOut, 
-  onAuthStateChanged, 
-  User as FirebaseUser 
+import {
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser
 } from 'firebase/auth';
 import { Lead, Project, ActivityLogItem } from '../types';
 import { BEFORE_AFTER_ITEMS, PROJECTS, LOGO_URL, PHONE_NUMBER_INTL } from '../data';
@@ -130,7 +130,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   // Activity Log state
   const [activities, setActivities] = useState<ActivityLogItem[]>(() => getLocalActivities());
   const [activityFilter, setActivityFilter] = useState<'all' | 'leads' | 'gallery' | 'before_after'>('all');
-  
+
   // Gallery Upload form states
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('برجولات حدائق');
@@ -162,7 +162,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   const [isSavingBA, setIsSavingBA] = useState(false);
   const [isCompressingBA, setIsCompressingBA] = useState<'before' | 'after' | null>(null);
   const [baSuccessMsg, setBaSuccessMsg] = useState('');
-  
+
   // Interactive test slider state
   const [testSliderPos, setTestSliderPos] = useState(50);
   const testSliderRef = useRef<HTMLDivElement>(null);
@@ -188,7 +188,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setAuthLoading(false);
       if (currentUser) {
-        if (currentUser.email === AUTHORIZED_ADMIN_EMAIL) {
+        if (currentUser.emailVerified && currentUser.email === AUTHORIZED_ADMIN_EMAIL) {
           setUser(currentUser);
           setAuthError(null);
         } else {
@@ -213,18 +213,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       applyResolvedGallery(updatedList);
     });
     applyResolvedGallery(getLocalGallery());
-
-    // Fetch from persistent server storage (immune to Firestore quota limit)
-    fetch('/api/gallery')
-      .then(r => r.json())
-      .then(data => {
-        if (data.success && Array.isArray(data.items) && data.items.length > 0) {
-          const merged = reconcileGalleryItems(data.items, getLocalGallery());
-          saveLocalGallery(merged);
-          applyResolvedGallery(merged);
-        }
-      })
-      .catch(() => {});
 
     return () => {
       unsubscribe();
@@ -311,20 +299,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     });
 
     // 4. Before & After single listener (conserves Firestore reads)
-    // Fetch from persistent server API immediately
-    fetch('/api/before-after')
-      .then(r => r.json())
-      .then(res => {
-        if (res.success && res.data && !baDirtyRef.current) {
-          if (res.data.beforeImage) setBaBeforeImage(res.data.beforeImage);
-          if (res.data.afterImage) setBaAfterImage(res.data.afterImage);
-          if (res.data.title) setBaTitle(res.data.title);
-          if (res.data.aspectRatio) setBaAspectRatio(res.data.aspectRatio);
-          if (res.data.fitMode) setBaFitMode(res.data.fitMode);
-        }
-      })
-      .catch(() => {});
-
     const unsubBAMain = onSnapshot(doc(db, 'before_after', 'main'), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
@@ -414,7 +388,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
-      if (result.user.email !== AUTHORIZED_ADMIN_EMAIL) {
+      if (!result.user.emailVerified || result.user.email !== AUTHORIZED_ADMIN_EMAIL) {
         setAuthError(`الحساب (${result.user.email}) ليس الحساب المعتمد للإدارة (${AUTHORIZED_ADMIN_EMAIL}).`);
         await signOut(auth);
       }
@@ -539,7 +513,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   // Gallery Reordering & Actions (Local-First + Coalescing Queue)
   const handleReorder = async (fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
-    
+
     // Resolve items from filteredProjects (the current view)
     const fromItem = filteredProjects[fromIndex];
     const toItem = filteredProjects[toIndex];
@@ -780,29 +754,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
 
       const cleanTitle = baTitle.trim() || BEFORE_AFTER_ITEMS[0].title;
 
-      // 2. Save to persistent server API (reliable across devices, 0 quota limit)
-      try {
-        const apiRes = await fetch('/api/before-after', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            beforeImage: finalBefore,
-            afterImage: finalAfter,
-            title: cleanTitle,
-            aspectRatio: baAspectRatio,
-            fitMode: baFitMode,
-            updatedAt: new Date().toISOString()
-          })
-        });
-        const apiJson = await apiRes.json();
-        if (apiJson.success && apiJson.data) {
-          if (apiJson.data.beforeImage) finalBefore = apiJson.data.beforeImage;
-          if (apiJson.data.afterImage) finalAfter = apiJson.data.afterImage;
-        }
-      } catch (apiErr) {
-        console.warn("Server API Before/After save notice:", apiErr);
-      }
-
       // 3. Save to Firestore (cloud sync fallback)
       try {
         await setDoc(doc(db, 'before_after', 'main'), {
@@ -826,7 +777,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
           }, { merge: true })
         ]);
       } catch (cloudErr) {
-        console.warn("Firestore save notice (quota limit or offline):", cloudErr);
+        throw cloudErr;
       }
 
       // 4. Update local states & cache now that cloud Firestore is safely committed
@@ -911,7 +862,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
   // Filtered Leads
   const filteredLeads = leads.filter(l => {
     const matchesStatus = leadStatusFilter === 'all' || l.status === leadStatusFilter;
-    const matchesSearch = !leadSearch.trim() || 
+    const matchesSearch = !leadSearch.trim() ||
       l.name.toLowerCase().includes(leadSearch.toLowerCase()) ||
       l.phone.includes(leadSearch) ||
       (l.service && l.service.toLowerCase().includes(leadSearch.toLowerCase()));
@@ -1072,7 +1023,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       {/* Top Application Header */}
       <header className="bg-slate-900/90 border-b border-slate-800 sticky top-0 z-50 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4">
-          
+
           {/* Brand & Status */}
           <div className="flex items-center gap-3.5">
             <div className="bg-white p-2 rounded-xl shadow-xs">
@@ -1204,7 +1155,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex-1">
-        
+
         {/* ----------------------------------------------------------------- */}
         {/* TAB 0: DASHBOARD (HOME) */}
         {/* ----------------------------------------------------------------- */}
@@ -1244,7 +1195,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
 
             {/* Stat Cards Grid (6 Metric Cards as Requested) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              
+
               {/* Stat 1: NEW LEADS (PROMINENT HIGHLIGHT) */}
               <div className="bg-gradient-to-br from-amber-500/20 via-amber-500/5 to-slate-900 border-2 border-amber-500/50 rounded-3xl p-6 shadow-xl shadow-amber-500/10 flex flex-col justify-between relative overflow-hidden group">
                 <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600"></div>
@@ -1260,7 +1211,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                   </div>
                   <div className="text-4xl sm:text-5xl font-black text-white mb-2">{newLeadsCount}</div>
                   <p className="text-xs text-amber-200/80 leading-relaxed">
-                    {newLeadsCount > 0 
+                    {newLeadsCount > 0
                       ? "تحتاج تواصل ومتابعة سريعة هاتفياً أو عبر واتساب مع العملاء."
                       : "لا توجد طلبات جديدة حالياً، تم الرد على كافة الطلبات بنجاح."}
                   </p>
@@ -1513,9 +1464,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                           <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
                             <Calendar size={13} />
                             <span>
-                              {lead.createdAt?.toDate 
-                                ? lead.createdAt.toDate().toLocaleString('ar-EG') 
-                                : typeof lead.createdAt === 'string' 
+                              {lead.createdAt?.toDate
+                                ? lead.createdAt.toDate().toLocaleString('ar-EG')
+                                : typeof lead.createdAt === 'string'
                                 ? new Date(lead.createdAt).toLocaleString('ar-EG')
                                 : 'الآن'}
                             </span>
@@ -1553,7 +1504,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
 
             {/* Quick Action Hub */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div 
+              <div
                 onClick={() => setActiveTab('gallery')}
                 className="bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-2xl p-5 cursor-pointer transition-all hover:bg-slate-850 group"
               >
@@ -1570,7 +1521,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                 </p>
               </div>
 
-              <div 
+              <div
                 onClick={() => setActiveTab('beforeAfter')}
                 className="bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-2xl p-5 cursor-pointer transition-all hover:bg-slate-850 group"
               >
@@ -1587,7 +1538,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                 </p>
               </div>
 
-              <div 
+              <div
                 onClick={() => setActiveTab('activity')}
                 className="bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-2xl p-5 cursor-pointer transition-all hover:bg-slate-850 group"
               >
@@ -1688,7 +1639,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                   const waUrl = `https://wa.me/${lead.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(waReplyText)}`;
 
                   return (
-                    <div 
+                    <div
                       key={lead.id}
                       className={`bg-slate-900 border rounded-2xl p-5 flex flex-col justify-between transition-all ${
                         lead.status === 'new'
@@ -1729,6 +1680,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                           <span className="font-mono font-bold text-slate-200" dir="ltr">{lead.phone}</span>
                         </div>
 
+                        {lead.city && <p className="text-xs text-slate-300">منطقة التنفيذ: {lead.city}</p>}
+                        {lead.landingPage && <p className="text-xs text-slate-400">صفحة الطلب: {lead.landingPage === 'roof' ? 'برجولات روف' : lead.landingPage === 'garden' ? 'برجولات حدائق' : 'الرئيسية'}</p>}
                         {/* Customer Message */}
                         {lead.message && (
                           <div className="bg-slate-950/40 border border-slate-800/60 rounded-xl p-3 text-xs text-slate-300 leading-relaxed">
@@ -1741,9 +1694,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                         <div className="text-[10px] text-slate-500 flex items-center gap-1.5">
                           <Clock size={12} />
                           <span>
-                            {lead.createdAt?.toDate 
-                              ? lead.createdAt.toDate().toLocaleString('ar-EG') 
-                              : typeof lead.createdAt === 'string' 
+                            {lead.createdAt?.toDate
+                              ? lead.createdAt.toDate().toLocaleString('ar-EG')
+                              : typeof lead.createdAt === 'string'
                               ? new Date(lead.createdAt).toLocaleString('ar-EG')
                               : 'الآن'}
                           </span>
@@ -1822,7 +1775,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
         {/* ----------------------------------------------------------------- */}
         {activeTab === 'gallery' && (
           <div className="space-y-8">
-            
+
             {/* Upload Section Card */}
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
               <div className="flex items-center gap-2.5 mb-6 pb-4 border-b border-slate-800">
@@ -1937,10 +1890,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
               <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2.5">
                   <div className={`p-2 rounded-xl border ${
-                    syncState.isSyncing 
-                      ? 'bg-sky-500/10 border-sky-500/30 text-sky-400' 
-                      : syncState.pendingCount > 0 
-                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' 
+                    syncState.isSyncing
+                      ? 'bg-sky-500/10 border-sky-500/30 text-sky-400'
+                      : syncState.pendingCount > 0
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
                       : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                   }`}>
                     {syncState.isSyncing ? (
@@ -2037,8 +1990,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                       onDrop={(e) => handleDrop(e, index)}
                       onDragEnd={handleDragEnd}
                       className={`bg-slate-900 border rounded-2xl overflow-hidden group flex flex-col justify-between transition-all duration-200 select-none ${
-                        isBeingDragged 
-                          ? 'opacity-40 border-dashed border-amber-500 scale-95' 
+                        isBeingDragged
+                          ? 'opacity-40 border-dashed border-amber-500 scale-95'
                           : isDragOver
                           ? 'border-amber-400 ring-2 ring-amber-400/40'
                           : 'border-slate-800 hover:border-slate-700'
@@ -2064,7 +2017,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
 
                         {/* Drag Handle Indicator */}
                         {isCurrentFilterAll && (
-                          <div 
+                          <div
                             className="absolute top-2 left-2 bg-slate-950/80 backdrop-blur-md text-amber-400 p-1.5 rounded-lg cursor-grab active:cursor-grabbing hover:bg-amber-500 hover:text-slate-950 transition-colors shadow-md"
                             title="اسحب من هنا لتغيير الترتيب"
                           >
@@ -2412,7 +2365,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                 <span className="text-[11px] text-slate-400">اسحب المؤشر للمقارنة</span>
               </div>
 
-              <div 
+              <div
                 ref={testSliderRef}
                 onMouseMove={(e) => updateTestPosition(e.clientX)}
                 onTouchMove={(e) => e.touches[0] && updateTestPosition(e.touches[0].clientX)}
@@ -2444,7 +2397,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                 />
 
                 {/* BEFORE Image (Clipped Overlay) */}
-                <div 
+                <div
                   className="absolute inset-0 overflow-hidden pointer-events-none"
                   style={{ clipPath: `inset(0 ${100 - testSliderPos}% 0 0)` }}
                 >
@@ -2474,7 +2427,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                 </span>
 
                 {/* Slider Handle Divider */}
-                <div 
+                <div
                   className="absolute top-0 bottom-0 w-1 bg-white shadow-2xl pointer-events-none z-20"
                   style={{ left: `${testSliderPos}%` }}
                 >
@@ -2596,7 +2549,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                 <History size={40} className="text-slate-600 mx-auto mb-3" />
                 <h4 className="text-base font-bold text-slate-300 mb-1">لا توجد عمليات مسجلة حالياً</h4>
                 <p className="text-xs text-slate-500">
-                  {activityFilter !== 'all' 
+                  {activityFilter !== 'all'
                     ? "لا توجد عمليات مسجلة في هذا التصنيف حالياً."
                     : "تم مسح كافة السجلات، أو لم تُنفَّذ أي عمليات جديدة بعد."}
                 </p>
@@ -2644,7 +2597,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5">
                             <div className="flex items-center gap-3.5">
                               <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                                isLeads 
+                                isLeads
                                   ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                                   : isGallery
                                   ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
@@ -2678,8 +2631,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                               <div className="text-[11px] text-slate-400 flex items-center gap-1.5 bg-slate-950/70 border border-slate-800/80 px-3 py-1.5 rounded-xl font-mono">
                                 <Clock size={12} className="text-amber-400" />
                                 <span>
-                                  {act.createdAt?.toDate 
-                                    ? act.createdAt.toDate().toLocaleString('ar-EG') 
+                                  {act.createdAt?.toDate
+                                    ? act.createdAt.toDate().toLocaleString('ar-EG')
                                     : typeof act.createdAt === 'string'
                                     ? new Date(act.createdAt).toLocaleString('ar-EG')
                                     : 'الآن'}
@@ -2727,7 +2680,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                 <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
               )}
               <span>{toastMessage.text}</span>
-              <button 
+              <button
                 type="button"
                 onClick={() => setToastMessage(null)}
                 className="mr-2 text-slate-400 hover:text-white transition-colors cursor-pointer"

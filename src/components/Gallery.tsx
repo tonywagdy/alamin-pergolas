@@ -1,17 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Layers, Maximize2, ArrowLeft, MessageCircle, X, ChevronRight, ChevronLeft } from 'lucide-react';
-import { db } from '../firebase';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { PROJECTS, PHONE_NUMBER_INTL, trackGAEvent } from '../data';
 import { Project } from '../types';
-import { 
-  getLocalGallery, 
-  saveLocalGallery, 
-  getLocalOrder, 
-  saveLocalOrder, 
-  getLocalDeletedStaticIds, 
-  saveLocalDeletedStaticIds 
+import {
+  getLocalGallery,
+  saveLocalGallery,
+  getLocalOrder,
+  saveLocalOrder,
+  getLocalDeletedStaticIds,
+  saveLocalDeletedStaticIds
 } from '../utils/galleryStorage';
 import { resolveProjectsImages } from '../utils/gallerySync';
 
@@ -24,54 +22,24 @@ const CATEGORIES = [
   "ديكورات خشبية"
 ];
 
-export const Gallery: React.FC = () => {
+export const Gallery: React.FC<{ initialCategory?: string }> = ({ initialCategory = 'الكل' }) => {
+  const sectionRef = useRef<HTMLElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const [visibleCount, setVisibleCount] = useState(9);
   const [firestoreProjects, setFirestoreProjects] = useState<Project[]>(() => getLocalGallery());
   const [deletedStaticIds, setDeletedStaticIds] = useState<number[]>(() => getLocalDeletedStaticIds());
   const [customOrderIds, setCustomOrderIds] = useState<string[]>(() => getLocalOrder());
-  const [selectedCategory, setSelectedCategory] = useState("الكل");
+  const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Fetch from persistent server API immediately (0 quota limit, instant response)
-    fetch('/api/gallery')
-      .then(r => r.json())
-      .then(res => {
-        if (isMounted && res.success && Array.isArray(res.items) && res.items.length > 0) {
-          resolveProjectsImages(res.items).then(resolved => {
-            if (isMounted) {
-              setFirestoreProjects(resolved);
-              saveLocalGallery(resolved);
-            }
-          });
-        }
-      })
-      .catch(() => {});
-
-    fetch('/api/order')
-      .then(r => r.json())
-      .then(res => {
-        if (isMounted && res.success && Array.isArray(res.orderIds) && res.orderIds.length > 0) {
-          setCustomOrderIds(res.orderIds);
-          saveLocalOrder(res.orderIds);
-        }
-      })
-      .catch(() => {});
-
-    fetch('/api/deleted-static')
-      .then(r => r.json())
-      .then(res => {
-        if (isMounted && res.success && Array.isArray(res.ids)) {
-          setDeletedStaticIds(res.ids);
-          saveLocalDeletedStaticIds(res.ids);
-        }
-      })
-      .catch(() => {});
-
     // Load gallery data from Firestore (with resilient timeout)
     const loadGalleryData = async () => {
       try {
+        const [{ db }, { collection, getDocs, doc, getDoc }] = await Promise.all([import('../firebase'), import('firebase/firestore')]);
+        if (!isMounted) return;
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Public Gallery fetch timeout')), 15000)
         );
@@ -133,10 +101,14 @@ export const Gallery: React.FC = () => {
     };
 
     // Load immediately so visitors on any device see all new photos without delay
-    loadGalleryData();
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) { observer.disconnect(); loadGalleryData(); }
+    }, { rootMargin: '400px' });
+    if (sectionRef.current) observer.observe(sectionRef.current);
 
     return () => {
       isMounted = false;
+      observer.disconnect();
     };
   }, []);
 
@@ -199,10 +171,29 @@ export const Gallery: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [lightboxIndex, handlePrev, handleNext]);
 
+  const lightboxOpen = lightboxIndex !== null;
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const previousFocus = document.activeElement as HTMLElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    dialogRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const controls = (Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button, a[href]') || []) as HTMLElement[]).filter(el => el.getClientRects().length > 0);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (!first) return;
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', trap);
+    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener('keydown', trap); previousFocus?.focus(); };
+  }, [lightboxOpen]);
+
   const activeProject = lightboxIndex !== null ? filteredProjects[lightboxIndex] : null;
 
   return (
-    <section id="gallery" className="py-24 bg-slate-50 overflow-hidden">
+    <section ref={sectionRef} id="gallery" className="py-24 bg-slate-50 overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-6">
           <div className="text-right">
@@ -213,10 +204,10 @@ export const Gallery: React.FC = () => {
               من أعمالنا الحقيقية على أرض الواقع
             </h2>
           </div>
-          <a 
+          <a
             href={`https://wa.me/${PHONE_NUMBER_INTL}?text=${encodeURIComponent('مرحباً شركة الأمين، أريد الاستفسار عن تفاصيل وطلب تصميم مخصص.')}`}
-            target="_blank" 
-            rel="noopener noreferrer" 
+            target="_blank"
+            rel="noopener noreferrer"
             onClick={() => trackGAEvent('whatsapp_click', { source: 'gallery_header' })}
             className="text-[#143d6a] font-bold border-b-2 border-[#143d6a] pb-1 hover:text-[#f39c12] hover:border-[#f39c12] transition-all flex items-center gap-1 group text-sm sm:text-base"
           >
@@ -230,14 +221,15 @@ export const Gallery: React.FC = () => {
           <div className="flex bg-white p-1.5 rounded-2xl border border-gray-200/80 shadow-xs gap-1.5">
             {CATEGORIES.map((cat) => (
               <button
-                key={cat}
+                key={cat} aria-pressed={selectedCategory === cat}
                 onClick={() => {
                   setSelectedCategory(cat);
+                  setVisibleCount(9);
                   setLightboxIndex(null);
                 }}
                 className={`relative px-4 sm:px-5 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all duration-200 cursor-pointer ${
-                  selectedCategory === cat 
-                    ? "bg-[#143d6a] text-white shadow-sm" 
+                  selectedCategory === cat
+                    ? "bg-[#143d6a] text-white shadow-sm"
                     : "text-gray-600 hover:text-[#143d6a] hover:bg-slate-100"
                 }`}
               >
@@ -248,12 +240,12 @@ export const Gallery: React.FC = () => {
         </div>
 
         {/* Projects Grid */}
-        <motion.div 
+        <motion.div
           layout
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 min-h-[350px]"
         >
           <AnimatePresence mode="popLayout">
-            {filteredProjects.map((project, index) => (
+            {filteredProjects.slice(0, visibleCount).map((project, index) => (
               <motion.div
                 layout
                 key={String(project.id)}
@@ -261,12 +253,14 @@ export const Gallery: React.FC = () => {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 20 }}
                 transition={{ duration: 0.3, delay: (index % 6) * 0.04 }}
+                role="button" tabIndex={0} aria-label={`عرض صورة ${project.title}`}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightboxIndex(index); } }}
                 onClick={() => setLightboxIndex(index)}
                 className="group relative overflow-hidden rounded-3xl aspect-[4/3] shadow-sm hover:shadow-xl transition-all duration-400 bg-white cursor-pointer border border-gray-100"
               >
-                <img 
-                  src={project.image} 
-                  alt={project.title} 
+                <img
+                  src={project.image}
+                  alt={project.title}
                   width={400}
                   height={300}
                   className="w-full h-full object-cover transition-transform duration-600 group-hover:scale-105"
@@ -276,7 +270,7 @@ export const Gallery: React.FC = () => {
                 />
 
                 {/* Dark Gradient on hover */}
-                <div className="absolute inset-0 bg-gradient-to-t from-[#143d6a]/90 via-[#143d6a]/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6 text-white text-right">
+                <div className="absolute inset-0 bg-gradient-to-t from-[#143d6a]/90 via-[#143d6a]/40 to-transparent opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6 text-white text-right">
                   <span className="text-xs font-bold text-amber-300 uppercase tracking-wider mb-1 flex items-center gap-1">
                     <Layers size={12} />
                     {project.category}
@@ -297,7 +291,7 @@ export const Gallery: React.FC = () => {
               <div className="max-w-md mx-auto p-8 rounded-3xl bg-white border border-gray-200">
                 <p className="text-lg font-bold text-[#143d6a] mb-2">لا توجد صور حالياً في هذا القسم</p>
                 <p className="text-gray-500 mb-6 text-sm">لكننا ننفذ جميع التصاميم المخصصة حسب طلبك بالمقاسات المناسبة لمكانك.</p>
-                <a 
+                <a
                   href={`https://wa.me/${PHONE_NUMBER_INTL}?text=${encodeURIComponent('مرحباً شركة الأمين، أود تصميم نموذج مخصص.')}`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -310,6 +304,9 @@ export const Gallery: React.FC = () => {
             </div>
           )}
         </motion.div>
+        {filteredProjects.length > visibleCount && <div className="text-center mt-8">
+          <button type="button" onClick={() => setVisibleCount(count => count + 9)} className="bg-[#143d6a] text-white rounded-xl px-8 py-3 font-bold">عرض المزيد من الأعمال</button>
+        </div>}
       </div>
 
       {/* Lightbox Modal */}
@@ -319,6 +316,7 @@ export const Gallery: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            ref={dialogRef} role="dialog" aria-modal="true" aria-label="عارض صور الأعمال"
             className="fixed inset-0 bg-[#143d6a]/95 backdrop-blur-md z-50 flex flex-col justify-center items-center p-4 sm:p-6"
             onClick={() => setLightboxIndex(null)}
           >
@@ -327,8 +325,8 @@ export const Gallery: React.FC = () => {
               <div className="text-white/80 font-bold bg-white/10 px-4 py-1.5 rounded-full text-xs sm:text-sm">
                 عمل {lightboxIndex! + 1} من {filteredProjects.length}
               </div>
-              
-              <button 
+
+              <button
                 onClick={() => setLightboxIndex(null)}
                 className="bg-white/10 hover:bg-[#f39c12] text-white p-2.5 rounded-full transition-all cursor-pointer"
                 aria-label="إغلاق العارض"
@@ -338,11 +336,11 @@ export const Gallery: React.FC = () => {
             </div>
 
             {/* Inner frame containing image */}
-            <div 
+            <div
               className="relative max-w-5xl w-full h-[60vh] sm:h-[68vh] flex justify-center items-center select-none"
               onClick={(e) => e.stopPropagation()}
             >
-              <button 
+              <button
                 onClick={handlePrev}
                 className="absolute right-1 sm:-right-14 bg-white/15 hover:bg-[#f39c12] text-white p-3 rounded-full transition-all shadow-xl z-10 hidden sm:flex items-center justify-center cursor-pointer"
                 aria-label="الصورة السابقة"
@@ -351,15 +349,15 @@ export const Gallery: React.FC = () => {
               </button>
 
               <div className="relative rounded-2xl overflow-hidden max-h-full max-w-full shadow-2xl border border-white/20 flex items-center justify-center bg-black/30">
-                <img 
-                  src={activeProject.image} 
-                  alt={activeProject.title} 
+                <img
+                  src={activeProject.image}
+                  alt={activeProject.title}
                   className="max-h-[55vh] sm:max-h-[65vh] w-auto h-auto object-contain rounded-xl"
                   referrerPolicy="no-referrer"
                 />
               </div>
 
-              <button 
+              <button
                 onClick={handleNext}
                 className="absolute left-1 sm:-left-14 bg-white/15 hover:bg-[#f39c12] text-white p-3 rounded-full transition-all shadow-xl z-10 hidden sm:flex items-center justify-center cursor-pointer"
                 aria-label="الصورة التالية"
@@ -369,7 +367,7 @@ export const Gallery: React.FC = () => {
             </div>
 
             {/* Slide Details Panel underneath */}
-            <div 
+            <div
               className="mt-4 text-center max-w-lg w-full text-white bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/15 shadow-xl z-10"
               onClick={(e) => e.stopPropagation()}
             >
@@ -377,9 +375,9 @@ export const Gallery: React.FC = () => {
                 {activeProject.category}
               </span>
               <h3 className="text-xl sm:text-2xl font-bold mb-3 text-white">{activeProject.title}</h3>
-              
+
               <div className="flex justify-center">
-                <a 
+                <a
                   href={`https://wa.me/${PHONE_NUMBER_INTL}?text=${encodeURIComponent(`مرحباً شركة الأمين للبرجولات، أريد الاستفسار عن تفاصيل وأسعار تصميم مماثل لـ "${activeProject.title}" المعروض في المعرض.`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -393,15 +391,15 @@ export const Gallery: React.FC = () => {
 
               {/* Mobile Arrows Touch Navigation */}
               <div className="flex justify-center gap-4 mt-3 sm:hidden">
-                <button 
-                  onClick={handlePrev} 
+                <button
+                  onClick={handlePrev}
                   className="bg-white/15 text-white p-2 rounded-full active:bg-[#f39c12]"
                   aria-label="السابق"
                 >
                   <ChevronRight size={20} />
                 </button>
-                <button 
-                  onClick={handleNext} 
+                <button
+                  onClick={handleNext}
                   className="bg-white/15 text-white p-2 rounded-full active:bg-[#f39c12]"
                   aria-label="التالي"
                 >

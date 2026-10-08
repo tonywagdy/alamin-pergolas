@@ -1,12 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { ArrowLeftRight, Sparkles } from 'lucide-react';
 import { BEFORE_AFTER_ITEMS } from '../data';
-import { db } from '../firebase';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 
 export const BeforeAfter: React.FC = () => {
   const [sliderPosition, setSliderPosition] = useState<number>(50);
   const [isDragging, setIsDragging] = useState<boolean>(false);
+  const sectionRef = useRef<HTMLElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Dynamic Before & After item with local storage caching for immediate 0ms render
@@ -31,63 +30,28 @@ export const BeforeAfter: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Fetch from persistent server API immediately (0ms delay, instant response)
-    fetch('/api/before-after')
-      .then(r => r.json())
-      .then(res => {
-        if (isMounted && res.success && res.data && res.data.beforeImage && res.data.afterImage) {
+    let unsubscribe: (() => void) | undefined;
+    const observeImages = async () => {
+      try {
+        const [{ db }, { doc, onSnapshot }] = await Promise.all([import('../firebase'), import('firebase/firestore')]);
+        if (!isMounted) return;
+        unsubscribe = onSnapshot(doc(db, 'before_after', 'main'), snapshot => {
+          if (!isMounted || !snapshot.exists()) return;
+          const data = snapshot.data();
+          if (!data.beforeImage || !data.afterImage) return;
           setCurrentItem(prev => {
-            const updated = {
-              ...prev,
-              title: res.data.title || prev.title,
-              description: res.data.description || prev.description,
-              beforeImage: res.data.beforeImage,
-              afterImage: res.data.afterImage,
-              aspectRatio: res.data.aspectRatio || '4/3',
-              fitMode: res.data.fitMode || 'contain'
-            };
-            try {
-              localStorage.setItem('alamin_before_after', JSON.stringify(updated));
-            } catch (err) {}
+            const updated = { ...prev, ...data, aspectRatio: data.aspectRatio || '4/3', fitMode: data.fitMode || 'contain' };
+            try { localStorage.setItem('alamin_before_after', JSON.stringify(updated)); } catch {}
             return updated;
           });
-        }
-      })
-      .catch(() => {});
-
-    // 2. Real-time Firestore listener: updates across all devices instantly
-    const unsub = onSnapshot(doc(db, 'before_after', 'main'), (snapshot) => {
-      if (isMounted && snapshot && snapshot.exists()) {
-        const data = snapshot.data();
-        if (data && data.beforeImage && data.afterImage) {
-          setCurrentItem(prev => {
-            const updated = {
-              ...prev,
-              title: data.title || prev.title,
-              description: data.description || prev.description,
-              location: data.location || prev.location,
-              beforeImage: data.beforeImage || prev.beforeImage,
-              afterImage: data.afterImage || prev.afterImage,
-              aspectRatio: data.aspectRatio || (prev as any).aspectRatio || '4/3',
-              fitMode: data.fitMode || (prev as any).fitMode || 'contain'
-            };
-            try {
-              localStorage.setItem('alamin_before_after', JSON.stringify(updated));
-            } catch (err) {}
-            return updated;
-          });
-        }
-      }
-    }, (err) => {
-      if (import.meta.env.DEV) {
-        console.warn("[Public] Before-after listener notice (using server cache):", err);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      unsub();
+        }, () => {});
+      } catch {}
     };
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) { observer.disconnect(); observeImages(); }
+    }, { rootMargin: '400px' });
+    if (sectionRef.current) observer.observe(sectionRef.current);
+    return () => { isMounted = false; observer.disconnect(); unsubscribe?.(); };
   }, []);
 
   const updatePosition = useCallback((clientX: number) => {
@@ -121,7 +85,10 @@ export const BeforeAfter: React.FC = () => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+    if (['ArrowRight', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'Home', 'End'].includes(e.key)) e.preventDefault();
+    if (e.key === 'Home') setSliderPosition(0);
+    else if (e.key === 'End') setSliderPosition(100);
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
       setSliderPosition((prev) => Math.min(100, prev + 5));
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
       setSliderPosition((prev) => Math.max(0, prev - 5));
@@ -129,7 +96,7 @@ export const BeforeAfter: React.FC = () => {
   };
 
   return (
-    <section id="before-after" className="py-24 bg-white overflow-hidden border-b border-gray-100">
+    <section ref={sectionRef} id="before-after" className="py-24 bg-white overflow-hidden border-b border-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center mb-14">
@@ -137,7 +104,7 @@ export const BeforeAfter: React.FC = () => {
             شاهد التحول بنفسك
           </span>
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-[#143d6a]">
-            قبل وبعد التركيب (تحول حقيقي 180 درجة)
+            قبل وبعد تنفيذ المشروع
           </h2>
           <div className="h-1 bg-[#f39c12] w-24 mx-auto mt-5 rounded-full" />
           <p className="mt-4 text-gray-600 max-w-2xl mx-auto text-base sm:text-lg leading-relaxed">
@@ -173,7 +140,7 @@ export const BeforeAfter: React.FC = () => {
                 <img
                   src={currentItem.afterImage}
                   alt=""
-                  className="w-full h-full object-cover blur-2xl scale-125 opacity-35 brightness-75"
+                  loading="lazy" decoding="async" className="w-full h-full object-cover blur-2xl scale-125 opacity-35 brightness-75"
                 />
               </div>
             )}
@@ -212,7 +179,7 @@ export const BeforeAfter: React.FC = () => {
                   <img
                     src={currentItem.beforeImage}
                     alt=""
-                    className="w-full h-full object-cover blur-2xl scale-125 opacity-35 brightness-75"
+                    loading="lazy" decoding="async" className="w-full h-full object-cover blur-2xl scale-125 opacity-35 brightness-75"
                   />
                 </div>
               )}
@@ -234,7 +201,7 @@ export const BeforeAfter: React.FC = () => {
               style={{ left: `${sliderPosition}%` }}
             >
               {/* Circular Handle with Opposing Arrows ⇔ */}
-              <div 
+              <div
                 className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#f39c12] text-white flex flex-col items-center justify-center shadow-2xl border-3 border-white ring-4 ring-black/20 transition-transform ${
                   isDragging ? 'scale-110' : 'hover:scale-105'
                 }`}

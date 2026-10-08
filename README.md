@@ -1,20 +1,17 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Alamin Pergolas
 
-# Run and deploy your AI Studio app
+Production: https://www.alaminpergolas.com/
 
-This contains everything you need to run your app locally.
+```sh
+npm ci
+npm run dev
+npm run test
+npm run test:rules
+npm run build
+```
 
-View your app in AI Studio: https://ai.studio/apps/c9dea870-1bc9-4dc9-9cf3-99089ddb6a4a
+Node 22 is used in CI. Firestore emulator tests require Java 17+. Vercel deploys `dist`; `server.ts` is a local development/static server, with no customer or management disk APIs. Firebase is the authoritative store.
 
-## Run Locally
+Measurement IDs and App Check configuration are documented in `.env.example`. Never commit credentials or put server secrets in `VITE_*` variables.
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+See [production readiness and account setup](docs/production-readiness.md) for remaining console configuration and the paused campaign outline.
