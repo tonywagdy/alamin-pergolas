@@ -14,10 +14,12 @@ Production: https://www.alaminpergolas.com/
 - Admin WhatsApp reply links normalize Egyptian phone numbers to international format, including Arabic/Persian digits.
 
 ## Outstanding or blocked
-- Firestore App Check was registered with reCAPTCHA Enterprise and enabled as Enforced with the owner's explicit acceptance of the production warning. Production deployment dpl_RYEWj13rm8rx92dmgPxAjTVxHGbH contains the public site key. Twelve verified requests were visible in the last-hour metrics before enforcement. A new quote write and the admin dashboard succeeded immediately after enforcement, within Google's stated propagation period of up to 15 minutes; a post-propagation recheck remains outstanding. Authentication enforcement has not been enabled. Preview builds have no production attestation key and cannot access this Firestore project after enforcement.
+- Firestore App Check was registered with reCAPTCHA Enterprise and enabled as Enforced with the owner's explicit acceptance of the production warning. Production deployment dpl_RYEWj13rm8rx92dmgPxAjTVxHGbH contains the public site key. Twelve verified requests were visible in the last-hour metrics before enforcement. A new quote write and the admin dashboard succeeded immediately after enforcement, within Google's stated propagation period of up to 15 minutes; a later post-propagation production quote was saved successfully and appeared in the authenticated admin dashboard. Authentication enforcement has not been enabled. Preview builds have no production attestation key and cannot access this Firestore project after enforcement.
 - Firebase Storage requires a billing upgrade; no upgrade was made. Existing Firestore image records remain in place. Storage rules and dormant Functions changes have not been deployed.
-- CSP remains report-only pending full network review.
-- PageSpeed API returned HTTP 429; no numeric performance score is asserted. Search Console has insufficient Core Web Vitals data.
+- Enforced baseline CSP restricts objects, base URLs, framing and form destinations. The broader script/style/network CSP remains report-only pending a complete integration review.
+- Latest production PageSpeed mobile lab report: performance 89, accessibility 100, best practices 100, SEO 100; FCP 2.6s, LCP 3.2s, TBT 0ms and CLS 0. Report: https://pagespeed.web.dev/analysis/https-www-alaminpergolas-com/vhflfw4yzx?form_factor=mobile . Lab results vary and are not real-user Core Web Vitals data.
+- Public motion dependencies were removed from seven components; main compressed JavaScript fell from about 131KB to 88KB. Font loading avoids late swapping and the contact submit button contrast was corrected.
+- Gallery keyboard open/close, FAQ interaction and production quote persistence were verified after the performance changes.
 - Search indexing is asynchronous; sitemap acceptance or an indexing request does not prove a page is indexed.
 
 ## Advertising scope
