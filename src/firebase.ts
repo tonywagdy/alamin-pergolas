@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 
 const firebaseConfig = {
   "projectId": "gen-lang-client-0718695041",
@@ -14,7 +15,14 @@ const firebaseConfig = {
   "measurementId": ""
 };
 
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
+
+// Configure the domain in Firebase App Check before setting this public key.
+// Enforce App Check for Firestore and Storage in the Firebase console after QA.
+const appCheckKey = import.meta.env.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY;
+if (appCheckKey) {
+  initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(appCheckKey), isTokenAutoRefreshEnabled: true });
+}
 
 // Initialize standard lightweight Firestore instance
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);

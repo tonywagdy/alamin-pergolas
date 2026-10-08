@@ -2,7 +2,7 @@ import React from 'react';
 import { ArrowLeft, MessageCircle, Sparkles } from 'lucide-react';
 import { PHONE_NUMBER_INTL, trackGAEvent } from '../data';
 
-export const Hero: React.FC = () => {
+export const Hero: React.FC<{ kind?: 'roof' | 'garden' }> = ({ kind }) => {
   const handleWhatsAppClick = () => {
     trackGAEvent('whatsapp_click', { source: 'hero' });
   };
@@ -11,9 +11,9 @@ export const Hero: React.FC = () => {
     <section id="home" className="relative min-h-[92vh] flex items-center overflow-hidden bg-[#143d6a] pt-20">
       {/* Background Hero Image - optimized WebP with eager loading for instant LCP */}
       <div className="absolute inset-0 z-0">
-        <img 
-          src="./input_file_0.webp" 
-          alt="برجولات خشبية فاخرة للحدائق والروفات" 
+        <img
+          src={kind === 'roof' ? '/input_file_1.webp' : '/input_file_0.webp'}
+          alt="برجولات خشبية فاخرة للحدائق والروفات"
           className="w-full h-full object-cover scale-105"
           fetchPriority="high"
           decoding="sync"
@@ -28,11 +28,11 @@ export const Hero: React.FC = () => {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#f39c12]/20 border border-[#f39c12]/40 text-amber-200 font-bold text-xs sm:text-sm mb-6">
             <Sparkles size={16} className="text-[#f39c12] animate-pulse" />
-            <span>تصنيع وتركيب في كل محافظات مصر بأعلى خامات</span>
+            <span>تصنيع وتركيب بالقاهرة والجيزة والسواحل بأعلى خامات</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black mb-6 leading-tight select-none">
-            الأمين للبرجولات <br />
+            {kind === 'roof' ? 'برجولات روف وأسطح' : kind === 'garden' ? 'برجولات حدائق وفلل' : 'الأمين للبرجولات'} <br />
             <span className="relative inline-block text-[#f39c12]">
               دقة وأمانة
               <span className="absolute bottom-1 right-0 left-0 h-1.5 bg-amber-400/70 rounded-full"></span>
@@ -41,22 +41,22 @@ export const Hero: React.FC = () => {
           </h1>
 
           <p className="text-lg sm:text-xl md:text-2xl mb-10 opacity-95 font-normal leading-relaxed text-gray-100 max-w-xl">
-            بنحول مساحتك الخارجية في الروف أو الحديقة لتحفة فنية تعيش معاك العمر كله. خشب طبيعي معالج ضد الشمس والمطر مع ضمان حقيقي على الجودة ومتابعة دورية.
+            بنحول مساحتك الخارجية في الروف أو الحديقة لمساحة مريحة بتصميم يناسب احتياجك. خشب طبيعي معالج ضد الشمس والمطر مع ضمان حقيقي على الجودة ومتابعة دورية.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-start">
-            <a 
-              href="#gallery" 
+            <a
+              href="#contact" onClick={() => trackGAEvent('quote_request_click', { source: 'hero' })}
               className="bg-[#f39c12] text-white px-9 py-4 rounded-full text-base sm:text-lg font-extrabold hover:bg-amber-600 transition-all text-center shadow-lg hover:shadow-[#f39c12]/30 flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>تصفح أعمالنا السابقة</span>
+              <span>اطلب عرض سعر لمشروعك</span>
               <ArrowLeft size={20} />
             </a>
-            
-            <a 
+
+            <a
               href={`https://wa.me/${PHONE_NUMBER_INTL}?text=${encodeURIComponent('مرحباً شركة الأمين للبرجولات، أود الاستفسار عن تفاصيل وطلب معاينة مجانية.')}`}
-              target="_blank" 
-              rel="noopener noreferrer" 
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={handleWhatsAppClick}
               className="bg-white/15 backdrop-blur-md border border-white/30 text-white px-8 py-4 rounded-full text-base sm:text-lg font-bold hover:bg-white hover:text-[#143d6a] transition-all text-center flex items-center justify-center gap-2"
             >
@@ -68,16 +68,16 @@ export const Hero: React.FC = () => {
           {/* Quick trust metrics */}
           <div className="mt-12 pt-8 border-t border-white/15 grid grid-cols-3 gap-4 text-center sm:text-right">
             <div>
-              <p className="text-2xl sm:text-3xl font-black text-[#f39c12]">10+ سنوات</p>
-              <p className="text-xs sm:text-sm text-gray-200">خبرة مهنية في مصر</p>
+              <p className="text-2xl sm:text-3xl font-black text-[#f39c12]">حسب المقاس</p>
+              <p className="text-xs sm:text-sm text-gray-200">تصميم يناسب مساحتك</p>
             </div>
             <div>
               <p className="text-2xl sm:text-3xl font-black text-[#f39c12]">ضمان حقيقي</p>
-              <p className="text-xs sm:text-sm text-gray-200">على الجودة والخامات</p>
+              <p className="text-xs sm:text-sm text-gray-200">اسأل عن الشروط والمدة</p>
             </div>
             <div>
-              <p className="text-2xl sm:text-3xl font-black text-[#f39c12]">100%</p>
-              <p className="text-xs sm:text-sm text-gray-200">أخشاب طبيعية معالجة</p>
+              <p className="text-2xl sm:text-3xl font-black text-[#f39c12]">خيارات متنوعة</p>
+              <p className="text-xs sm:text-sm text-gray-200">خامات وتشطيبات للمشروع</p>
             </div>
           </div>
         </div>

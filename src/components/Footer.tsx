@@ -11,13 +11,13 @@ export const Footer: React.FC = () => {
           <div className="md:col-span-2 space-y-4">
             <div className="flex items-center gap-3">
               <div className="bg-white p-2 rounded-xl shadow-xs">
-                <img 
-                  src={LOGO_URL} 
-                  alt="الأمين للبرجولات" 
+                <img
+                  src={LOGO_URL}
+                  alt="الأمين للبرجولات"
                   width={48}
                   height={48}
-                  className="h-12 w-auto" 
-                  referrerPolicy="no-referrer" 
+                  className="h-12 w-auto"
+                  referrerPolicy="no-referrer"
                 />
               </div>
               <div>
@@ -31,29 +31,29 @@ export const Footer: React.FC = () => {
             </p>
 
             <div className="flex gap-3 pt-2">
-              <a 
-                href={`https://wa.me/${PHONE_NUMBER_INTL}`} 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href={`https://wa.me/${PHONE_NUMBER_INTL}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 onClick={() => trackGAEvent('whatsapp_click', { source: 'footer' })}
                 className="bg-white/10 p-3 rounded-full hover:bg-[#f39c12] transition-colors"
                 aria-label="تواصل مع شركة الأمين عبر الواتساب"
               >
                 <MessageCircle size={18} />
               </a>
-              <a 
-                href="https://www.facebook.com/Aminforpergola/" 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href="https://www.facebook.com/Aminforpergola/"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="bg-white/10 p-3 rounded-full hover:bg-[#f39c12] transition-colors"
                 aria-label="صفحة فيسبوك لشركة الأمين"
               >
                 <Facebook size={18} />
               </a>
-              <a 
-                href="https://www.instagram.com/elamincompany" 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href="https://www.instagram.com/elamincompany"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="bg-white/10 p-3 rounded-full hover:bg-[#f39c12] transition-colors"
                 aria-label="صفحة إنستغرام لشركة الأمين"
               >
@@ -66,13 +66,17 @@ export const Footer: React.FC = () => {
           <div>
             <h4 className="font-bold text-base mb-4 text-[#f39c12]">روابط سريعة</h4>
             <ul className="space-y-2.5 text-sm text-gray-300 font-medium">
-              <li><a href="#home" className="hover:text-amber-300 transition-colors">الرئيسية</a></li>
-              <li><a href="#services" className="hover:text-amber-300 transition-colors">خدماتنا</a></li>
-              <li><a href="#gallery" className="hover:text-amber-300 transition-colors">معرض الأعمال</a></li>
-              <li><a href="#steps" className="hover:text-amber-300 transition-colors">خطوات الشغل</a></li>
-              <li><a href="#before-after" className="hover:text-amber-300 transition-colors">قبل وبعد</a></li>
-              <li><a href="#about" className="hover:text-amber-300 transition-colors">من نحن</a></li>
-              <li><a href="#faq" className="hover:text-amber-300 transition-colors">الأسئلة الشائعة</a></li>
+              <li><a href="/#home" className="hover:text-amber-300 transition-colors">الرئيسية</a></li>
+              <li><a href="/#services" className="hover:text-amber-300 transition-colors">خدماتنا</a></li>
+              <li><a href="/#gallery" className="hover:text-amber-300 transition-colors">معرض الأعمال</a></li>
+              <li><a href="/#steps" className="hover:text-amber-300 transition-colors">خطوات الشغل</a></li>
+              <li><a href="/#before-after" className="hover:text-amber-300 transition-colors">قبل وبعد</a></li>
+              <li><a href="/#about" className="hover:text-amber-300 transition-colors">من نحن</a></li>
+              <li><a href="/roof-pergolas" className="hover:text-amber-300">برجولات روف</a></li>
+              <li><a href="/garden-pergolas" className="hover:text-amber-300">برجولات حدائق</a></li>
+              <li><a href="/privacy.html" className="hover:text-amber-300">سياسة الخصوصية</a></li>
+              <li><button type="button" onClick={() => window.dispatchEvent(new Event('alamin-open-consent'))} className="underline">اختيارات ملفات القياس</button></li>
+              <li><a href="/#faq" className="hover:text-amber-300 transition-colors">الأسئلة الشائعة</a></li>
             </ul>
           </div>
 
@@ -82,8 +86,8 @@ export const Footer: React.FC = () => {
             <ul className="space-y-3 text-sm text-gray-300">
               <li className="flex items-center gap-2.5">
                 <Phone size={16} className="text-[#f39c12] flex-shrink-0" />
-                <a 
-                  href={`tel:${PHONE_NUMBER_INTL}`} 
+                <a
+                  href={`tel:+${PHONE_NUMBER_INTL}`}
                   onClick={() => trackGAEvent('phone_call_click', { source: 'footer' })}
                   className="hover:text-amber-300 font-bold"
                 >
@@ -92,10 +96,11 @@ export const Footer: React.FC = () => {
               </li>
               <li className="flex items-center gap-2.5">
                 <MessageCircle size={16} className="text-green-400 flex-shrink-0" />
-                <a 
-                  href={`https://wa.me/${PHONE_NUMBER_INTL}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
+                <a
+                  href={`https://wa.me/${PHONE_NUMBER_INTL}`}
+                  onClick={() => trackGAEvent('whatsapp_click', { source: 'footer_text' })}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="hover:text-amber-300 font-bold"
                 >
                   واتساب: {PHONE_NUMBER_LOCAL}
@@ -103,7 +108,7 @@ export const Footer: React.FC = () => {
               </li>
               <li className="flex items-start gap-2.5">
                 <MapPin size={16} className="text-[#f39c12] flex-shrink-0 mt-1" />
-                <span>القاهرة الكبرى، الشيخ زايد، التجمع، وكافة محافظات مصر</span>
+                <span>القاهرة والجيزة، التجمع، الشيخ زايد والسواحل</span>
               </li>
             </ul>
           </div>

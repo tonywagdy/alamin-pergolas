@@ -1,112 +1,38 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { defineConfig, loadEnv, Plugin } from 'vite';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { defineConfig, type Plugin } from 'vite';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function devChatProxyPlugin(apiKey: string): Plugin {
+const directory = path.dirname(fileURLToPath(import.meta.url));
+function landingMetadata(): Plugin {
   return {
-    name: 'dev-chat-proxy',
-    configureServer(server) {
-      server.middlewares.use('/api/chat', async (req, res) => {
-        if (req.method !== 'POST') {
-          res.statusCode = 405;
-          res.end(JSON.stringify({ error: 'Method not allowed' }));
-          return;
-        }
-
-        let body = '';
-        req.on('data', (chunk) => {
-          body += chunk;
-        });
-
-        req.on('end', async () => {
-          try {
-            const parsed = body ? JSON.parse(body) : {};
-            const { message, messages } = parsed;
-
-            if (!apiKey) {
-              res.setHeader('Content-Type', 'application/json');
-              res.statusCode = 200;
-              res.end(JSON.stringify({ 
-                reply: "مرحباً بك في شركة الأمين للبرجولات! يرجى التواصل معنا مباشرة عبر الواتساب أو الهاتف على 01017919385 وسنوافيك بكافة التفاصيل والأسعار فوراً."
-              }));
-              return;
-            }
-
-            const systemInstruction = `
-              أنت مساعد ذكي لشركة "الأمين للبرجولات" (Al-Amin Pergolas) في مصر.
-              متخصصون في البرجولات الخشبية، برجولات روف، حدائق، وأعمال خشبية وديكورية.
-              رقم التواصل: 01017919385.
-              أجب بلهجة مصرية مهذبة وودودة ومختصرة ومفيدة.
-              إذا سأل العميل عن الأسعار، وضح له أن السعر يعتمد على المساحة ونوع الخشب والتصميم، واعرض عليه رفع المقاسات مجاناً أو التواصل على الواتساب للمعاينة.
-            `;
-
-            const contents: any[] = [];
-            if (Array.isArray(messages) && messages.length > 0) {
-              messages.forEach((m: any) => {
-                contents.push({
-                  role: m.role === 'bot' ? 'model' : 'user',
-                  parts: [{ text: m.text }]
-                });
-              });
-            } else if (message) {
-              contents.push({
-                role: 'user',
-                parts: [{ text: message }]
-              });
-            }
-
-            const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                systemInstruction: { parts: [{ text: systemInstruction }] },
-                contents
-              })
-            });
-
-            if (!geminiRes.ok) {
-              throw new Error(`Gemini API error: ${geminiRes.status}`);
-            }
-
-            const geminiData = await geminiRes.json();
-            const reply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "عذراً، حدث خطأ ما. يرجى المحاولة لاحقاً.";
-
-            res.setHeader('Content-Type', 'application/json');
-            res.statusCode = 200;
-            res.end(JSON.stringify({ reply }));
-          } catch (err: any) {
-            console.error("Dev chat error:", err);
-            res.setHeader('Content-Type', 'application/json');
-            res.statusCode = 500;
-            res.end(JSON.stringify({ error: err.message || 'Internal Server Error' }));
-          }
-        });
-      });
+    name: 'landing-page-metadata',
+    closeBundle() {
+      const html = readFileSync(path.join(directory, 'dist/index.html'), 'utf8');
+      for (const page of [
+        { slug: 'roof-pergolas', title: 'برجولات روف وأسطح | تصميم وتنفيذ حسب المقاس | الأمين للبرجولات', description: 'تصميم وتنفيذ برجولات روف وأسطح بخشب معالج وخيارات تشطيب تناسب مساحتك. شاهد أعمالنا واطلب عرض سعر ومعاينة من الأمين للبرجولات.', image: 'input_file_1.webp' },
+        { slug: 'garden-pergolas', title: 'برجولات حدائق وفلل | تصميم وتنفيذ حسب المقاس | الأمين للبرجولات', description: 'برجولات خشبية للحدائق والفلل بتصميم مناسب للمساحة والاستخدام. شاهد نماذج الأعمال واطلب عرض سعر ومعاينة من الأمين للبرجولات.', image: 'input_file_0.webp' }
+      ]) {
+        let content = html.replace(/<title>.*?<\/title>/, `<title>${page.title}</title>`)
+          .replace(/(<meta name="description" content=")[^"]*/, `$1${page.description}`)
+          .replace(/(<meta property="og:title" content=")[^"]*/, `$1${page.title}`)
+          .replace(/(<meta property="og:description" content=")[^"]*/, `$1${page.description}`)
+          .replace(/(<meta name="twitter:title" content=")[^"]*/, `$1${page.title}`)
+          .replace(/(<meta name="twitter:description" content=")[^"]*/, `$1${page.description}`)
+          .replace(/(<link rel="canonical" href=")[^"]*/, `$1https://www.alaminpergolas.com/${page.slug}`)
+          .replace(/(<meta property="og:url" content=")[^"]*/, `$1https://www.alaminpergolas.com/${page.slug}`)
+          .replace(/(<meta (?:property="og:image"|name="twitter:image") content=")[^"]*/g, `$1https://www.alaminpergolas.com/${page.image}`)
+          .replace(/(<link rel="preload" as="image" href=")[^"]*/, `$1/${page.image}`);
+        writeFileSync(path.join(directory, `dist/${page.slug}.html`), content);
+      }
     }
   };
 }
-
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '');
-  return {
-    plugins: [
-      react(), 
-      tailwindcss(),
-      devChatProxyPlugin(env.GEMINI_API_KEY || process.env.GEMINI_API_KEY || '')
-    ],
-    base: '/',
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, '.'),
-      },
-    },
-    server: {
-      hmr: process.env.DISABLE_HMR !== 'true',
-    },
-  };
+export default defineConfig({
+  plugins: [react(), tailwindcss(), landingMetadata()],
+  base: '/',
+  resolve: { alias: { '@': directory } },
+  server: { hmr: process.env.DISABLE_HMR !== 'true' }
 });

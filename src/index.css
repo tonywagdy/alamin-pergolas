@@ -3,7 +3,7 @@
 @theme {
   --font-sans: "Cairo", -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif;
   --font-serif: "Amiri", "Traditional Arabic", "Times New Roman", serif;
-  
+
   --color-brand-blue: #143d6a;
   --color-brand-orange: #f39c12;
   --color-brand-light: #ffcc33;
@@ -31,4 +31,13 @@ body {
 /* Smooth scroll */
 html {
   scroll-behavior: smooth;
+}
+
+section[id] { scroll-margin-top: 5.5rem; }
+:focus-visible { outline: 3px solid #f39c12; outline-offset: 4px; }
+.skip-link { position: fixed; top: -100px; right: 1rem; z-index: 100; background: white; padding: 1rem; }
+.skip-link:focus { top: 1rem; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

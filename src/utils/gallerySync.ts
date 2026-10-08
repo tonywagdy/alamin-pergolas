@@ -1,6 +1,6 @@
 /**
  * Local-First + Background Sync + Offline Queue Manager for Alamin Pergolas Gallery
- * 
+ *
  * Architecture:
  * 1. IndexedDB: Permanent local storage for compressed image Blobs (prevents 5MB localStorage quota limit).
  * 2. LocalStorage: Lightweight metadata, sync queues, and ordering records.
@@ -10,9 +10,12 @@
  * 6. Resilience: Quota errors (RESOURCE_EXHAUSTED) or offline states NEVER discard local data.
  */
 
-import { doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase';
 import { Project, SyncStatus, ActivityLogItem } from '../types';
+
+async function galleryBackend() {
+  const [{ db }, firestore] = await Promise.all([import('../firebase'), import('firebase/firestore')]);
+  return { db, ...firestore };
+}
 
 // ============================================================================
 // 1. INDEXED_DB FOR BINARY BLOBS
@@ -474,8 +477,9 @@ export async function enqueueNewUpload(params: {
   blob: Blob;
   order?: number;
 }): Promise<Project> {
+  const { db, doc, setDoc, serverTimestamp } = await galleryBackend();
   const localId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-  
+
   // 1. Save compressed Blob to IndexedDB as permanent local backup
   await saveLocalBlob(localId, params.blob);
   console.log('[Gallery] Local save completed in IndexedDB for blob:', localId);
@@ -543,26 +547,6 @@ export async function enqueueNewUpload(params: {
     notifySyncListeners();
   }
 
-  // 6. Persist to server backend API immediately and adopt clean disk URL
-  try {
-    fetch('/api/gallery', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newProject)
-    })
-      .then(r => r.json())
-      .then(res => {
-        if (res.success && res.item && res.item.image && res.item.image.startsWith('/uploads/')) {
-          newProject.image = res.item.image;
-          const current = getLocalGallery();
-          const updated = current.map(p => p.id === localId ? { ...p, image: res.item.image } : p);
-          saveLocalGallery(updated);
-          notifyGalleryListeners(updated);
-        }
-      })
-      .catch(() => {});
-  } catch (e) {}
-
   // 7. Log activity
   enqueueLocalActivity('gallery', `إضافة مشروع جديد للمعرض: "${params.title.trim()}" في تصنيف "${params.category}"`);
 
@@ -578,14 +562,6 @@ let reorderDebounceTimer: any = null;
 export function enqueueReorder(orderIds: string[]): void {
   // 1. Immediately update localStorage order
   saveLocalOrder(orderIds);
-
-  try {
-    fetch('/api/order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderIds })
-    }).catch(() => {});
-  } catch (e) {}
 
   // 2. Coalescing: replace any pending reorder task with the latest orderIds
   saveReorderQueue({
@@ -620,10 +596,6 @@ export async function enqueueDelete(
   const target = currentList.find(p => String(p.id) === idStr);
   const updatedList = currentList.filter(p => String(p.id) !== idStr);
   saveLocalGallery(updatedList);
-
-  try {
-    fetch('/api/gallery/' + idStr, { method: 'DELETE' }).catch(() => {});
-  } catch (e) {}
 
   // 2. Remove from local order
   const currentOrder = getLocalOrder();
@@ -737,6 +709,7 @@ export async function runSyncQueue(force: boolean = false): Promise<void> {
   console.log('[Gallery] Sync started (force = ' + force + ')');
 
   try {
+    const { db, doc, setDoc, deleteDoc, serverTimestamp } = await galleryBackend();
     // -------------------------------------------------------------
     // A. Process Pending Uploads
     // -------------------------------------------------------------
@@ -754,7 +727,7 @@ export async function runSyncQueue(force: boolean = false): Promise<void> {
       try {
         // Mark as uploading in local gallery
         const currentGallery = getLocalGallery();
-        const updatedWithUploading = currentGallery.map(p => 
+        const updatedWithUploading = currentGallery.map(p =>
           p.id === task.id ? { ...p, syncStatus: 'uploading' as SyncStatus } : p
         );
         saveLocalGallery(updatedWithUploading);

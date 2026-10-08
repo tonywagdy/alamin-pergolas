@@ -1,111 +1,81 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Phone, MessageCircle, MapPin, CheckCircle, Send, Clock, ShieldCheck } from 'lucide-react';
-import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { Phone, MessageCircle, MapPin, CheckCircle, Send, ShieldCheck } from 'lucide-react';
 import { PHONE_NUMBER_INTL, PHONE_NUMBER_LOCAL, trackGAEvent } from '../data';
 
-export const Contact: React.FC = () => {
+import { LEAD_SERVICES, validateLead, awaitLeadConfirmation, LeadForm } from '../utils/leads';
+
+export const Contact: React.FC<{ initialService?: string }> = ({ initialService = LEAD_SERVICES[0] }) => {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    service: 'برجولة حديقة وفلل',
+    service: initialService,
+    city: '',
     message: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [whatsappUrl, setWhatsappUrl] = useState('');
 
+  const [error, setError] = useState('');
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const successRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (isSuccess) successRef.current?.focus(); }, [isSuccess]);
+  const [website, setWebsite] = useState('');
+  const pending = useRef<{ key: string; id: string; write: Promise<void>; data: LeadForm } | null>(null);
+  const requestLock = useRef(false);
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanName = formData.name.trim();
-    const cleanPhone = formData.phone.trim();
-    const cleanMessage = formData.message.trim();
-    const cleanService = formData.service;
-
-    if (!cleanName || !cleanPhone) return;
-
+    if (requestLock.current || website) return;
+    const checked = validateLead(formData);
+    if (!checked.data || !privacyAccepted) {
+      setError(checked.error || 'يرجى الموافقة على استخدام بياناتك للتواصل بخصوص طلبك.');
+      return;
+    }
+    requestLock.current = true;
     setIsSubmitting(true);
-
-    const leadPayload = {
-      name: cleanName,
-      phone: cleanPhone,
-      service: cleanService,
-      message: cleanMessage,
-      createdAt: serverTimestamp(),
-      status: 'new'
-    };
-
-    // 1. Save to localStorage backup so no customer inquiry is ever lost
+    setError('');
+    const data = checked.data;
+    const text = `طلب عرض سعر من موقع الأمين للبرجولات:
+الاسم: ${data.name}
+الهاتف: ${data.phone}
+الخدمة: ${data.service}
+منطقة التنفيذ: ${data.city}
+التفاصيل: ${data.message || 'بدون ملاحظات'}`;
+    setWhatsappUrl(`https://wa.me/${PHONE_NUMBER_INTL}?text=${encodeURIComponent(text)}`);
+    const key = JSON.stringify(data);
     try {
-      const stored = localStorage.getItem('alamin_local_leads');
-      const leadsList = stored ? JSON.parse(stored) : [];
-      leadsList.unshift({
-        id: 'local_' + Date.now(),
-        name: cleanName,
-        phone: cleanPhone,
-        service: cleanService,
-        message: cleanMessage,
-        createdAt: new Date().toISOString(),
-        status: 'new'
-      });
-      localStorage.setItem('alamin_local_leads', JSON.stringify(leadsList.slice(0, 50)));
-    } catch (err) {
-      console.warn("LocalStorage lead save notice:", err);
-    }
-
-    // 2. Save lead to Firestore collection 'leads' with 3.5s timeout (never hangs user submission)
-    try {
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Lead submission timeout')), 3500)
-      );
-      await Promise.race([
-        addDoc(collection(db, 'leads'), leadPayload),
-        timeoutPromise
-      ]);
-    } catch (error) {
-      if (import.meta.env.DEV) {
-        console.warn("[Contact] Lead saved locally; cloud notice:", error);
+      if (!pending.current || pending.current.key !== key) {
+        const [{ db }, { collection, doc, setDoc, serverTimestamp }] = await Promise.all([import('../firebase'), import('firebase/firestore')]);
+        const ref = doc(collection(db, 'leads'));
+        pending.current = { key, id: ref.id, data, write: setDoc(ref, {
+          ...data, createdAt: serverTimestamp(), status: 'new', privacyConsent: true,
+          landingPage: window.location.pathname === '/roof-pergolas' ? 'roof' : window.location.pathname === '/garden-pergolas' ? 'garden' : 'home'
+        }) };
+        // Preserve timeouts for retry, but clear a definitively rejected write.
+        const request = pending.current;
+        request.write.catch(() => { if (pending.current === request) pending.current = null; });
       }
-    }
-
-    // 3. Track event in Google Analytics
-    try {
-      trackGAEvent('lead_form_submit', {
-        service: cleanService
-      });
+      const request = pending.current;
+      await awaitLeadConfirmation(request.write);
+      trackGAEvent('generate_lead', { service: data.service, lead_id: request.id,
+        landing_page: window.location.pathname });
+      pending.current = null;
+      setAwaitingConfirmation(false);
+      setIsSuccess(true);
+      setFormData({ name: '', phone: '', city: '', service: initialService, message: '' });
     } catch (err) {
-      // ignore
+      const uncertain = err instanceof Error && err.message === 'confirmation-timeout';
+      setAwaitingConfirmation(uncertain);
+      setError(uncertain
+        ? 'لم يصل تأكيد الحفظ بعد. اضغط «التحقق من الطلب» أو تواصل عبر واتساب. لا نؤكد استلام الطلب قبل الحفظ.'
+        : 'تعذر إرسال الطلب. بياناتك ما زالت في النموذج؛ حاول مرة أخرى أو أرسلها عبر واتساب.');
+    } finally {
+      requestLock.current = false;
+      setIsSubmitting(false);
     }
-
-    // 4. Formulate WhatsApp Direct Message
-    const text = `طلب جديد من الموقع الرسمي لشركة الأمين:
-- الاسم: ${cleanName}
-- رقم الهاتف: ${cleanPhone}
-- نوع الخدمة: ${cleanService}
-- التفاصيل أو المقاسات: ${cleanMessage || 'بدون ملاحظات إضافية'}`;
-
-    const waLink = `https://wa.me/${PHONE_NUMBER_INTL}?text=${encodeURIComponent(text)}`;
-    setWhatsappUrl(waLink);
-
-    // Show success view
-    setIsSuccess(true);
-    setIsSubmitting(false);
-
-    // Try opening WhatsApp in a safe manner
-    try {
-      window.open(waLink, '_blank');
-    } catch (err) {
-      console.warn("Window open notice:", err);
-    }
-
-    // Reset fields
-    setFormData({
-      name: '',
-      phone: '',
-      service: 'برجولة حديقة وفلل',
-      message: ''
-    });
   };
 
   return (
@@ -126,8 +96,8 @@ export const Contact: React.FC = () => {
 
             <div className="space-y-6">
               {/* Phone Card */}
-              <a 
-                href={`tel:${PHONE_NUMBER_INTL}`} 
+              <a
+                href={`tel:+${PHONE_NUMBER_INTL}`}
                 onClick={() => trackGAEvent('phone_call_click', { source: 'contact_section' })}
                 className="flex items-center gap-5 p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors group cursor-pointer"
               >
@@ -141,10 +111,10 @@ export const Contact: React.FC = () => {
               </a>
 
               {/* WhatsApp Card */}
-              <a 
-                href={`https://wa.me/${PHONE_NUMBER_INTL}?text=${encodeURIComponent('مرحباً شركة الأمين للبرجولات، أود الاستفسار عن تفاصيل وطلب معاينة مجانية.')}`} 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href={`https://wa.me/${PHONE_NUMBER_INTL}?text=${encodeURIComponent('مرحباً شركة الأمين للبرجولات، أود الاستفسار عن تفاصيل وطلب معاينة مجانية.')}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 onClick={() => trackGAEvent('whatsapp_click', { source: 'contact_section' })}
                 className="flex items-center gap-5 p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors group cursor-pointer"
               >
@@ -164,24 +134,24 @@ export const Contact: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-xs text-gray-300 font-bold mb-0.5">تغطية العمل والمواقع</p>
-                  <p className="text-lg font-bold">القاهرة الكبرى ومتاحون في جميع محافظات مصر</p>
+                  <p className="text-lg font-bold">القاهرة والجيزة والتجمع والشيخ زايد والسواحل</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Form */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             className="bg-white rounded-3xl p-8 sm:p-10 text-[#143d6a] shadow-2xl text-right"
           >
             <h3 className="text-2xl font-black mb-2">طلب معاينة مجانية</h3>
-            <p className="text-gray-500 text-sm mb-6">املأ البيانات وسيقوم فريق شركة الأمين بالرد والتواصل معك خلال ساعة واحدة.</p>
+            <p className="text-gray-500 text-sm mb-6">اكتب بيانات مشروعك وسنتواصل معك لتحديد المعاينة وعرض السعر خلال ساعات العمل.</p>
 
             {isSuccess ? (
-              <div className="bg-emerald-50 border border-emerald-200 p-6 sm:p-8 rounded-2xl text-center space-y-4">
+              <div ref={successRef} role="status" aria-live="polite" tabIndex={-1} className="bg-emerald-50 border border-emerald-200 p-6 sm:p-8 rounded-2xl text-center space-y-4">
                 <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-xs">
                   <CheckCircle size={34} />
                 </div>
@@ -194,6 +164,7 @@ export const Contact: React.FC = () => {
                     href={whatsappUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={() => trackGAEvent('whatsapp_click', { source: 'lead_success' })}
                     className="w-full bg-green-600 hover:bg-green-700 text-white py-3.5 px-4 rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all"
                   >
                     <MessageCircle size={18} />
@@ -202,7 +173,7 @@ export const Contact: React.FC = () => {
                 )}
                 <div>
                   <button
-                    onClick={() => setIsSuccess(false)}
+                    onClick={() => { setIsSuccess(false); setError(''); setWhatsappUrl(''); }}
                     className="mt-2 text-gray-500 hover:text-[#143d6a] text-xs font-bold underline transition-colors cursor-pointer"
                   >
                     إرسال طلب استفسار آخر
@@ -210,37 +181,42 @@ export const Contact: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4" aria-busy={isSubmitting}>
+                <div className="absolute -left-[10000px]" aria-hidden="true">
+                  <label htmlFor="company-website">الموقع الإلكتروني</label>
+                  <input id="company-website" name="website" tabIndex={-1} autoComplete="off" value={website} onChange={e => setWebsite(e.target.value)} />
+                </div>
+                <fieldset disabled={isSubmitting || awaitingConfirmation} className="space-y-4">
                 <div>
                   <label htmlFor="customer-name" className="block text-xs font-bold text-gray-700 mb-1.5">الاسم بالكامل *</label>
-                  <input 
-                    id="customer-name"
-                    type="text" 
+                  <input
+                    id="customer-name" name="name" autoComplete="name" minLength={2} maxLength={80}
+                    type="text"
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full bg-slate-50 border border-gray-200 rounded-xl p-3.5 focus:border-[#f39c12] focus:ring-1 focus:ring-[#f39c12] outline-none text-sm font-medium" 
-                    placeholder="اكتب اسمك الكريم" 
+                    className="w-full bg-slate-50 border border-gray-200 rounded-xl p-3.5 focus:border-[#f39c12] focus:ring-1 focus:ring-[#f39c12] outline-none text-sm font-medium"
+                    placeholder="اكتب اسمك الكريم"
                   />
                 </div>
 
                 <div>
                   <label htmlFor="customer-phone" className="block text-xs font-bold text-gray-700 mb-1.5">رقم الهاتف أو الواتساب *</label>
-                  <input 
-                    id="customer-phone"
-                    type="tel" 
+                  <input
+                    id="customer-phone" name="phone" autoComplete="tel" inputMode="tel" maxLength={20}
+                    type="tel"
                     required
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full bg-slate-50 border border-gray-200 rounded-xl p-3.5 focus:border-[#f39c12] focus:ring-1 focus:ring-[#f39c12] outline-none text-sm font-medium" 
-                    placeholder="01012345678" 
+                    className="w-full bg-slate-50 border border-gray-200 rounded-xl p-3.5 focus:border-[#f39c12] focus:ring-1 focus:ring-[#f39c12] outline-none text-sm font-medium"
+                    placeholder="01012345678"
                     dir="ltr"
                   />
                 </div>
 
                 <div>
                   <label htmlFor="service-type" className="block text-xs font-bold text-gray-700 mb-1.5">نوع الخدمة المطلوبة</label>
-                  <select 
+                  <select
                     id="service-type"
                     name="service"
                     aria-label="نوع الخدمة المطلوبة"
@@ -248,27 +224,38 @@ export const Contact: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, service: e.target.value })}
                     className="w-full bg-slate-50 border border-gray-200 rounded-xl p-3.5 focus:border-[#f39c12] focus:ring-1 focus:ring-[#f39c12] outline-none text-sm font-medium"
                   >
-                    <option value="برجولة حديقة وفلل">برجولة حديقة وفلل</option>
-                    <option value="برجولة روف وأسطح">برجولة روف وأسطح</option>
-                    <option value="سقف ديكوري وتجاليد حوائط">سقف ديكوري وتجاليد حوائط</option>
-                    <option value="أعمال خشبية وبوابات مخصصة">أعمال خشبية وبوابات مخصصة</option>
-                    <option value="صيانة وتجديد برجولة قديمة">صيانة وتجديد برجولة قديمة</option>
+                    {LEAD_SERVICES.map(service => <option key={service} value={service}>{service}</option>)}
                   </select>
                 </div>
 
                 <div>
+                  <label htmlFor="customer-city" className="block text-xs font-bold text-gray-700 mb-1.5">منطقة التنفيذ أو المحافظة *</label>
+                  <input id="customer-city" name="city" required minLength={2} maxLength={80} autoComplete="address-level2" value={formData.city}
+                    onChange={e => setFormData({ ...formData, city: e.target.value })}
+                    className="w-full bg-slate-50 border border-gray-200 rounded-xl p-3.5 text-sm" placeholder="مثال: التجمع الخامس، القاهرة" />
+                </div>
+                <div>
                   <label htmlFor="customer-message" className="block text-xs font-bold text-gray-700 mb-1.5">تفاصيل أو مقاسات تقريبية (اختياري)</label>
-                  <textarea 
-                    id="customer-message"
-                    rows={3} 
+                  <textarea
+                    id="customer-message" name="message" maxLength={1500}
+                    rows={3}
                     value={formData.message}
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                    className="w-full bg-slate-50 border border-gray-200 rounded-xl p-3.5 focus:border-[#f39c12] focus:ring-1 focus:ring-[#f39c12] outline-none text-sm font-medium" 
+                    className="w-full bg-slate-50 border border-gray-200 rounded-xl p-3.5 focus:border-[#f39c12] focus:ring-1 focus:ring-[#f39c12] outline-none text-sm font-medium"
                     placeholder="المساحة التقريبية، مكان التنفيذ، أو أي مواصفات ترغب بها..."
                   ></textarea>
                 </div>
 
-                <button 
+                <label className="flex gap-2 items-start text-sm text-gray-600">
+                  <input type="checkbox" required checked={privacyAccepted} onChange={e => setPrivacyAccepted(e.target.checked)} className="mt-1" />
+                  <span>أوافق على استخدام بياناتي للتواصل بشأن طلبي وفق <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="underline text-[#143d6a]">سياسة الخصوصية</a>.</span>
+                </label>
+                </fieldset>
+                {error && <div role="alert" className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-800">
+                  <p>{error}</p>
+                  {whatsappUrl && <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" onClick={() => trackGAEvent('whatsapp_click', { source: 'lead_fallback' })} className="block underline font-bold mt-2">إرسال الطلب عبر واتساب</a>}
+                </div>}
+                <button
                   type="submit"
                   disabled={isSubmitting}
                   className="w-full bg-[#f39c12] text-white py-4 rounded-xl font-bold text-base hover:bg-amber-600 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
@@ -278,14 +265,14 @@ export const Contact: React.FC = () => {
                   ) : (
                     <>
                       <Send size={18} />
-                      <span>إرسال الطلب وحجز المعاينة المجانية</span>
+                      <span>{awaitingConfirmation ? 'التحقق من الطلب' : 'إرسال طلب عرض سعر ومعاينة'}</span>
                     </>
                   )}
                 </button>
 
                 <p className="text-xs text-gray-400 text-center flex items-center justify-center gap-1 mt-2">
                   <ShieldCheck size={14} className="text-emerald-500" />
-                  <span>بياناتك في أمان تام ولا يتم مشاركتها إطلاقاً.</span>
+                  <span>نستخدم بياناتك للتواصل بشأن مشروعك. إرسال رسالة واتساب يتم باختيارك.</span>
                 </p>
               </form>
             )}
