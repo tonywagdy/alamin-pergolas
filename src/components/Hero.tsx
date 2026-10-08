@@ -47,7 +47,7 @@ export const Hero: React.FC<{ kind?: 'roof' | 'garden' }> = ({ kind }) => {
           <div className="flex flex-col sm:flex-row gap-4 justify-start">
             <a
               href="#contact" onClick={() => trackGAEvent('quote_request_click', { source: 'hero' })}
-              className="bg-[#f39c12] text-white px-9 py-4 rounded-full text-base sm:text-lg font-extrabold hover:bg-amber-600 transition-all text-center shadow-lg hover:shadow-[#f39c12]/30 flex items-center justify-center gap-2 cursor-pointer"
+              className="bg-[#f39c12] text-[#143d6a] px-9 py-4 rounded-full text-base sm:text-lg font-extrabold hover:bg-amber-600 transition-all text-center shadow-lg hover:shadow-[#f39c12]/30 flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>اطلب عرض سعر لمشروعك</span>
               <ArrowLeft size={20} />

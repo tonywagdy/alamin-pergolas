@@ -146,8 +146,8 @@ export const BeforeAfter: React.FC = () => {
             )}
 
             {/* 1. Permanent Badges (Always Visible on both sides) */}
-            {/* Left side: AFTER (High contrast amber-600) */}
-            <div className="absolute top-4 left-4 z-20 bg-amber-600 text-white font-extrabold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-lg border border-white/20 flex items-center gap-1.5 pointer-events-none">
+            {/* Left side: AFTER (High contrast amber-700) */}
+            <div className="absolute top-4 left-4 z-20 bg-amber-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-lg border border-white/20 flex items-center gap-1.5 pointer-events-none">
               <Sparkles size={15} />
               <span>بعد التركيب</span>
             </div>
@@ -202,7 +202,7 @@ export const BeforeAfter: React.FC = () => {
             >
               {/* Circular Handle with Opposing Arrows ⇔ */}
               <div
-                className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#f39c12] text-white flex flex-col items-center justify-center shadow-2xl border-3 border-white ring-4 ring-black/20 transition-transform ${
+                className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#f39c12] text-[#143d6a] flex flex-col items-center justify-center shadow-2xl border-3 border-white ring-4 ring-black/20 transition-transform ${
                   isDragging ? 'scale-110' : 'hover:scale-105'
                 }`}
               >
