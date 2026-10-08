@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, HelpCircle, MessageCircle } from 'lucide-react';
 import { FAQ_ITEMS, PHONE_NUMBER_INTL, trackGAEvent } from '../data';
 
@@ -49,22 +48,15 @@ export const FAQ: React.FC = () => {
                     <ChevronDown size={18} />
                   </span>
                 </button>
-
-                <AnimatePresence initial={false}>
                   {isOpen && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.3 }}
+                    <div
                       className="overflow-hidden border-t border-gray-100"
                     >
                       <div className="p-6 text-gray-600 text-sm sm:text-base leading-relaxed bg-slate-50/40">
                         {item.answer}
                       </div>
-                    </motion.div>
+                    </div>
                   )}
-                </AnimatePresence>
               </div>
             );
           })}

@@ -1,5 +1,4 @@
 import React from 'react';
-import { motion } from 'motion/react';
 import { Ruler, Palette, Hammer, Award, ArrowLeft } from 'lucide-react';
 import { WORK_STEPS, PHONE_NUMBER_INTL, trackGAEvent } from '../data';
 
@@ -33,12 +32,8 @@ export const WorkSteps: React.FC = () => {
         {/* 4 Steps Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 relative">
           {WORK_STEPS.map((step, idx) => (
-            <motion.div
+            <div
               key={step.step}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: idx * 0.12, duration: 0.5 }}
               className="bg-white p-8 rounded-3xl border border-gray-200/80 shadow-xs relative flex flex-col justify-between hover:shadow-lg transition-all text-right group"
             >
               {/* Step Number Tag */}
@@ -64,7 +59,7 @@ export const WorkSteps: React.FC = () => {
                   style={{ width: `${(step.step / WORK_STEPS.length) * 100}%` }}
                 />
               </div>
-            </motion.div>
+            </div>
           ))}
         </div>
 

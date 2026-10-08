@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion } from 'motion/react';
 import { Phone, MessageCircle, MapPin, CheckCircle, Send, ShieldCheck } from 'lucide-react';
 import { PHONE_NUMBER_INTL, PHONE_NUMBER_LOCAL, trackGAEvent } from '../data';
 
@@ -141,10 +140,7 @@ export const Contact: React.FC<{ initialService?: string }> = ({ initialService 
           </div>
 
           {/* Form */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+          <div
             className="bg-white rounded-3xl p-5 sm:p-10 text-[#143d6a] shadow-2xl text-right"
           >
             <h3 className="text-2xl font-black mb-2">طلب معاينة مجانية</h3>
@@ -263,10 +259,8 @@ export const Contact: React.FC<{ initialService?: string }> = ({ initialService 
                   {isSubmitting ? (
                     <span>جاري إرسال طلبك...</span>
                   ) : (
-                    <>
                       <Send size={18} />
                       <span>{awaitingConfirmation ? 'التحقق من الطلب' : 'إرسال طلب عرض سعر ومعاينة'}</span>
-                    </>
                   )}
                 </button>
 
@@ -276,7 +270,7 @@ export const Contact: React.FC<{ initialService?: string }> = ({ initialService 
                 </p>
               </form>
             )}
-          </motion.div>
+          </div>
         </div>
       </div>
     </section>

@@ -1,5 +1,4 @@
 import React from 'react';
-import { motion } from 'motion/react';
 import { CheckCircle2, Star, Award, Shield, Users, Clock } from 'lucide-react';
 import { COMPANY_STATS, PHONE_NUMBER_INTL, PHONE_NUMBER_LOCAL, trackGAEvent } from '../data';
 
@@ -16,11 +15,7 @@ export const About: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Visual Showcase with stats badge */}
-          <motion.div
-            initial={{ opacity: 0, x: -30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7 }}
+          <div
             className="relative order-2 lg:order-1 mt-6 sm:mt-0"
           >
             <div className="relative rounded-3xl overflow-hidden shadow-xl border-4 border-white">
@@ -66,14 +61,10 @@ export const About: React.FC = () => {
                 <p className="text-[11px] sm:text-xs text-gray-500 font-bold">متابعة وصيانة بعد التسليم</p>
               </div>
             </div>
-          </motion.div>
+          </div>
 
           {/* Text Content & Values */}
-          <motion.div
-            initial={{ opacity: 0, x: 30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7 }}
+          <div
             className="text-right order-1 lg:order-2"
           >
             <span className="inline-block text-xs sm:text-sm font-bold text-amber-800 uppercase tracking-widest mb-3 bg-amber-100/80 border border-amber-200/60 px-4 py-1.5 rounded-full">
@@ -117,7 +108,7 @@ export const About: React.FC = () => {
                 احجز معاينة مجانية لمشروعك
               </a>
             </div>
-          </motion.div>
+          </div>
         </div>
       </div>
     </section>

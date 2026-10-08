@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { Menu, X, Phone } from 'lucide-react';
 import { LOGO_URL, PHONE_NUMBER_INTL, PHONE_NUMBER_LOCAL, trackGAEvent } from '../data';
 
@@ -77,13 +76,8 @@ export const Navbar: React.FC = () => {
           </div>
         </div>
       </div>
-
-      <AnimatePresence>
         {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
+          <div
             id="mobile-navigation" className="xl:hidden bg-white border-t border-gray-100 overflow-hidden shadow-lg"
           >
             <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain px-4 pt-2 pb-6 space-y-2 text-right">
@@ -110,9 +104,8 @@ export const Navbar: React.FC = () => {
                 </a>
               </div>
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
     </nav>
   );
 };

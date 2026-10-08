@@ -1,5 +1,4 @@
 import React from 'react';
-import { motion } from 'motion/react';
 import { TreePine, Sun, Hammer, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { PHONE_NUMBER_INTL } from '../data';
 
@@ -39,25 +38,6 @@ const SERVICES_DATA = [
 ];
 
 export const Services: React.FC = () => {
-  const containerVariants = {
-    hidden: {},
-    visible: {
-      transition: {
-        staggerChildren: 0.12
-      }
-    }
-  };
-
-  const cardVariants = {
-    hidden: { opacity: 0, y: 30, scale: 0.96 },
-    visible: { 
-      opacity: 1, 
-      y: 0, 
-      scale: 1, 
-      transition: { type: "spring", stiffness: 85, damping: 16 } 
-    }
-  };
-
   return (
     <section id="services" className="py-24 bg-white overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -74,21 +54,12 @@ export const Services: React.FC = () => {
           </p>
         </div>
 
-        <motion.div 
-          variants={containerVariants}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: "-80px" }}
+        <div
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8"
         >
           {SERVICES_DATA.map((service) => (
-            <motion.div
+            <div
               key={service.id}
-              variants={cardVariants}
-              whileHover={{ 
-                y: -10, 
-                boxShadow: "0 20px 35px -10px rgba(20, 61, 106, 0.12)"
-              }}
               className="group bg-slate-50 border border-slate-100 p-7 rounded-3xl hover:bg-[#143d6a] hover:text-white transition-all duration-300 shadow-sm relative overflow-hidden flex flex-col justify-between"
             >
               <div>
@@ -119,9 +90,9 @@ export const Services: React.FC = () => {
                   <ArrowLeft size={16} />
                 </a>
               </div>
-            </motion.div>
+            </div>
           ))}
-        </motion.div>
+        </div>
       </div>
     </section>
   );

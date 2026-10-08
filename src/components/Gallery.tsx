@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { Layers, Maximize2, ArrowLeft, MessageCircle, X, ChevronRight, ChevronLeft } from 'lucide-react';
 import { PROJECTS, PHONE_NUMBER_INTL, trackGAEvent } from '../data';
 import { Project } from '../types';
@@ -240,19 +239,12 @@ export const Gallery: React.FC<{ initialCategory?: string }> = ({ initialCategor
         </div>
 
         {/* Projects Grid */}
-        <motion.div
-          layout
+        <div
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 min-h-[350px]"
         >
-          <AnimatePresence mode="popLayout">
             {filteredProjects.slice(0, visibleCount).map((project, index) => (
-              <motion.div
-                layout
+              <div
                 key={String(project.id)}
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                transition={{ duration: 0.3, delay: (index % 6) * 0.04 }}
                 role="button" tabIndex={0} aria-label={`عرض صورة ${project.title}`}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightboxIndex(index); } }}
                 onClick={() => setLightboxIndex(index)}
@@ -284,9 +276,8 @@ export const Gallery: React.FC<{ initialCategory?: string }> = ({ initialCategor
                     </span>
                   </div>
                 </div>
-              </motion.div>
+              </div>
             ))}
-          </AnimatePresence>
 
           {filteredProjects.length === 0 && (
             <div className="col-span-full py-16 text-center">
@@ -305,19 +296,15 @@ export const Gallery: React.FC<{ initialCategory?: string }> = ({ initialCategor
               </div>
             </div>
           )}
-        </motion.div>
+        </div>
         {filteredProjects.length > visibleCount && <div className="text-center mt-8">
           <button type="button" onClick={() => setVisibleCount(count => count + 9)} className="bg-[#143d6a] text-white rounded-xl px-8 py-3 font-bold">عرض المزيد من الأعمال</button>
         </div>}
       </div>
 
       {/* Lightbox Modal */}
-      <AnimatePresence>
         {activeProject && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+          <div
             ref={dialogRef} role="dialog" aria-modal="true" aria-label="عارض صور الأعمال"
             className="fixed inset-0 bg-[#143d6a]/95 backdrop-blur-md z-50 flex flex-col justify-center items-center p-4 sm:p-6"
             onClick={() => setLightboxIndex(null)}
@@ -409,9 +396,8 @@ export const Gallery: React.FC<{ initialCategory?: string }> = ({ initialCategor
                 </button>
               </div>
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
     </section>
   );
 };
