@@ -145,7 +145,7 @@ export const Contact: React.FC<{ initialService?: string }> = ({ initialService 
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="bg-white rounded-3xl p-8 sm:p-10 text-[#143d6a] shadow-2xl text-right"
+            className="bg-white rounded-3xl p-5 sm:p-10 text-[#143d6a] shadow-2xl text-right"
           >
             <h3 className="text-2xl font-black mb-2">طلب معاينة مجانية</h3>
             <p className="text-gray-500 text-sm mb-6">اكتب بيانات مشروعك وسنتواصل معك لتحديد المعاينة وعرض السعر خلال ساعات العمل.</p>
