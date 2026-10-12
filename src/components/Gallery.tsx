@@ -45,7 +45,7 @@ export const Gallery: React.FC<{ initialCategory?: string }> = ({ initialCategor
         const [{ db }, { collection, onSnapshot, doc }] = await Promise.all([import('../firebase'), import('firebase/firestore')]);
         if (!isMounted) return;
         let imageRevision = 0;
-        unsubscribers.push(onSnapshot(collection(db, 'gallery'), snapshot => {
+        unsubscribers.push(onSnapshot(collection(db, 'gallery'), { includeMetadataChanges: true }, snapshot => {
           const revision = ++imageRevision;
           const items: Project[] = snapshot.docs.map(docSnap => {
             const data = docSnap.data();
@@ -60,13 +60,13 @@ export const Gallery: React.FC<{ initialCategory?: string }> = ({ initialCategor
             saveLocalGallery(resolved);
           }).catch(notice);
         }, notice));
-        unsubscribers.push(onSnapshot(collection(db, 'deleted_static_images'), snapshot => {
+        unsubscribers.push(onSnapshot(collection(db, 'deleted_static_images'), { includeMetadataChanges: true }, snapshot => {
           if (!isMounted || snapshot.metadata.fromCache) return;
           const ids = snapshot.docs.map(docSnap => Number(docSnap.id));
           setDeletedStaticIds(ids);
           saveLocalDeletedStaticIds(ids);
         }, notice));
-        unsubscribers.push(onSnapshot(doc(db, 'gallery_order', 'main'), snapshot => {
+        unsubscribers.push(onSnapshot(doc(db, 'gallery_order', 'main'), { includeMetadataChanges: true }, snapshot => {
           if (!isMounted || snapshot.metadata.fromCache) return;
           const ids = snapshot.exists() && Array.isArray(snapshot.data().orderIds)
             ? snapshot.data().orderIds : [];
