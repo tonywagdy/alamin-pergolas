@@ -1,104 +1,11 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { ArrowLeftRight, Sparkles } from 'lucide-react';
-import { BEFORE_AFTER_ITEMS } from '../data';
+import currentItem from '../before-after-static.json';
 
 export const BeforeAfter: React.FC = () => {
   const [sliderPosition, setSliderPosition] = useState<number>(50);
   const [isDragging, setIsDragging] = useState<boolean>(false);
-  const sectionRef = useRef<HTMLElement>(null);
-  const [refreshVersion, setRefreshVersion] = useState(0);
-  const [loadState, setLoadState] = useState<'loading' | 'live' | 'error'>('loading');
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Dynamic Before & After item with local storage caching for immediate 0ms render
-  const [currentItem, setCurrentItem] = useState(() => {
-    try {
-      const cached = localStorage.getItem('alamin_before_after');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed.beforeImage && parsed.afterImage) {
-          return {
-            ...BEFORE_AFTER_ITEMS[0],
-            ...parsed
-          };
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-    return BEFORE_AFTER_ITEMS[0];
-  });
-
-  useEffect(() => {
-    let isMounted = true;
-    let unsubscribe: (() => void) | undefined;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    let retries = 0;
-    let requestRevision = 0;
-    setLoadState('loading');
-
-    const onError = (error: unknown) => {
-      if (!isMounted) return;
-      console.warn('[BeforeAfter] Latest comparison could not load:', error);
-      setLoadState('error');
-      if (retries < 3 && !retryTimer) {
-        const delay = [2000, 5000, 15000][retries++];
-        retryTimer = setTimeout(() => {
-          retryTimer = undefined;
-          void observeImages();
-        }, delay);
-      }
-    };
-    const observeImages = async () => {
-      const revision = ++requestRevision;
-      unsubscribe?.();
-      unsubscribe = undefined;
-      try {
-        const [{ db }, { doc, onSnapshot }] = await Promise.all([import('../firebase'), import('firebase/firestore')]);
-        if (!isMounted || revision !== requestRevision) return;
-        unsubscribe = onSnapshot(doc(db, 'before_after', 'main'), { includeMetadataChanges: true }, snapshot => {
-          if (!isMounted || revision !== requestRevision) return;
-          const fromCache = snapshot.metadata.fromCache;
-          if (!snapshot.exists()) {
-            if (!fromCache) setLoadState('live');
-            return;
-          }
-          const data = snapshot.data();
-          if (typeof data.beforeImage !== 'string' || !data.beforeImage ||
-              typeof data.afterImage !== 'string' || !data.afterImage) {
-            if (!fromCache) onError(new Error('Published comparison is incomplete'));
-            return;
-          }
-          setCurrentItem(prev => {
-            const updated = { ...prev, ...data, aspectRatio: data.aspectRatio || '4/3', fitMode: data.fitMode || 'contain' };
-            try { localStorage.setItem('alamin_before_after', JSON.stringify(updated)); } catch {}
-            return updated;
-          });
-          if (!fromCache) {
-            retries = 0;
-            if (retryTimer) clearTimeout(retryTimer);
-            retryTimer = undefined;
-            setLoadState('live');
-          }
-        }, error => { if (revision === requestRevision) onError(error); });
-      } catch (error) { if (revision === requestRevision) onError(error); }
-    };
-    const retryOnline = () => {
-      if (retryTimer) clearTimeout(retryTimer);
-      retryTimer = undefined;
-      retries = 0;
-      setLoadState('loading');
-      void observeImages();
-    };
-    void observeImages();
-    window.addEventListener('online', retryOnline);
-    return () => {
-      isMounted = false;
-      unsubscribe?.();
-      if (retryTimer) clearTimeout(retryTimer);
-      window.removeEventListener('online', retryOnline);
-    };
-  }, [refreshVersion]);
 
   const updatePosition = useCallback((clientX: number) => {
     if (!containerRef.current) return;
@@ -142,7 +49,7 @@ export const BeforeAfter: React.FC = () => {
   };
 
   return (
-    <section ref={sectionRef} id="before-after" className="py-24 bg-white overflow-hidden border-b border-gray-100">
+    <section id="before-after" className="py-24 bg-white overflow-hidden border-b border-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center mb-14">
@@ -159,12 +66,6 @@ export const BeforeAfter: React.FC = () => {
         </div>
 
         <div className="max-w-4xl mx-auto">
-          {loadState !== 'live' && (
-            <div role="status" className="mb-4 text-center text-sm text-[#143d6a]">
-              {loadState === 'loading' ? 'جارٍ جلب أحدث صور قبل وبعد…' : 'تعذر جلب أحدث الصور. الصور المعروضة قد تكون نسخة سابقة.'}
-              {loadState === 'error' && <button type="button" onClick={() => setRefreshVersion(version => version + 1)} className="mr-3 underline font-bold">إعادة المحاولة</button>}
-            </div>
-          )}
           {/* Main Interactive Comparison Box */}
           <div
             ref={containerRef}

@@ -1,3 +1,4 @@
+import staticComparison from '../before-after-static.json';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { normalizePhone } from '../utils/leads';
@@ -89,7 +90,7 @@ import {
   User as FirebaseUser
 } from 'firebase/auth';
 import { Lead, Project, ActivityLogItem } from '../types';
-import { BEFORE_AFTER_ITEMS, PROJECTS, LOGO_URL, PHONE_NUMBER_INTL } from '../data';
+import { PROJECTS, LOGO_URL, PHONE_NUMBER_INTL } from '../data';
 
 const AUTHORIZED_ADMIN_EMAIL = 'twagdy067@gmail.com';
 
@@ -148,33 +149,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     savingsPercent: number;
   } | null>(null);
 
-  // Before & After management states
-  const [baTitle, setBaTitle] = useState(BEFORE_AFTER_ITEMS[0].title);
-  const [baBeforeImage, setBaBeforeImage] = useState(BEFORE_AFTER_ITEMS[0].beforeImage);
-  const [baAfterImage, setBaAfterImage] = useState(BEFORE_AFTER_ITEMS[0].afterImage);
-  const [baAspectRatio, setBaAspectRatio] = useState<'4/3' | '16/10' | '16/9' | '3/4'>('4/3');
-  const [baFitMode, setBaFitMode] = useState<'contain' | 'cover'>('contain');
-  const [baBeforeBlob, setBaBeforeBlob] = useState<Blob | null>(null);
-  const [baAfterBlob, setBaAfterBlob] = useState<Blob | null>(null);
-  const [baDirty, setBaDirty] = useState(false);
-  const baDirtyRef = useRef(false);
-  baDirtyRef.current = baDirty;
-
-  const [isSavingBA, setIsSavingBA] = useState(false);
-  const [isCompressingBA, setIsCompressingBA] = useState<'before' | 'after' | null>(null);
-  const [baSuccessMsg, setBaSuccessMsg] = useState('');
-
-  // Interactive test slider state
-  const [testSliderPos, setTestSliderPos] = useState(50);
-  const testSliderRef = useRef<HTMLDivElement>(null);
-
   // In-App Action Confirmations & Toasts (Replaces window.confirm/alert for 100% iframe reliability)
   const [leadIdPendingDelete, setLeadIdPendingDelete] = useState<string | null>(null);
   const [galleryItemPendingDelete, setGalleryItemPendingDelete] = useState<string | number | null>(null);
   const [activityPendingDelete, setActivityPendingDelete] = useState<string | null>(null);
   const [showClearAllActivitiesConfirm, setShowClearAllActivitiesConfirm] = useState(false);
   const [isDeletingActivity, setIsDeletingActivity] = useState(false);
-  const [showResetBAConfirm, setShowResetBAConfirm] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
@@ -299,34 +279,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       setDeletedStaticIds(getLocalDeletedStaticIds());
     });
 
-    // 4. Before & After single listener (conserves Firestore reads)
-    const unsubBAMain = onSnapshot(doc(db, 'before_after', 'main'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        if (!baDirtyRef.current) {
-          if (data.title) setBaTitle(data.title);
-          if (data.beforeImage) setBaBeforeImage(data.beforeImage);
-          if (data.afterImage) setBaAfterImage(data.afterImage);
-          if (data.aspectRatio) setBaAspectRatio(data.aspectRatio);
-          if (data.fitMode) setBaFitMode(data.fitMode);
-        }
-      } else {
-        try {
-          const cached = localStorage.getItem('alamin_before_after');
-          if (cached && !baDirtyRef.current) {
-            const parsed = JSON.parse(cached);
-            if (parsed.beforeImage) setBaBeforeImage(parsed.beforeImage);
-            if (parsed.afterImage) setBaAfterImage(parsed.afterImage);
-            if (parsed.title) setBaTitle(parsed.title);
-            if (parsed.aspectRatio) setBaAspectRatio(parsed.aspectRatio);
-            if (parsed.fitMode) setBaFitMode(parsed.fitMode);
-          }
-        } catch (e) {}
-      }
-    }, (err) => {
-      console.warn("BA main fetch notice (using server cache):", err);
-    });
-
     // 5. Activity log listener
     const qActivity = collection(db, 'activity_log');
     const unsubActivity = onSnapshot(qActivity, (snapshot) => {
@@ -377,7 +329,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       unsubLeads();
       unsubGallery();
       unsubDeleted();
-      unsubBAMain();
       unsubActivity();
       unsubOrder();
     };
@@ -691,183 +642,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
 
     showToast("تم حذف المشروع من المعرض بنجاح!", "success");
   };
-
-  // Before / After Actions
-  const handleSelectBAFile = async (e: React.ChangeEvent<HTMLInputElement>, side: 'before' | 'after') => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsCompressingBA(side);
-    setBaSuccessMsg('');
-    try {
-      // High-efficiency web compression: 1080px max, 0.78 quality, max 300,000 characters (~220 KB)
-      const res: CompressionResult = await compressImage(file, 1080, 0.78, 300000);
-      if (side === 'before') {
-        setBaBeforeImage(res.dataUrl);
-        setBaBeforeBlob(res.blob);
-      } else {
-        setBaAfterImage(res.dataUrl);
-        setBaAfterBlob(res.blob);
-      }
-      setBaDirty(true);
-    } catch (err) {
-      console.warn("Client compression notice, attempting fallback:", err);
-      const reader = new FileReader();
-      reader.onload = async () => {
-        if (typeof reader.result === 'string') {
-          try {
-            const compressed = await compressDataUrl(reader.result, 1080, 0.78, 300000);
-            if (side === 'before') {
-              setBaBeforeImage(compressed.dataUrl);
-              setBaBeforeBlob(compressed.blob);
-            } else {
-              setBaAfterImage(compressed.dataUrl);
-              setBaAfterBlob(compressed.blob);
-            }
-          } catch {
-            if (side === 'before') setBaBeforeImage(reader.result as string);
-            else setBaAfterImage(reader.result as string);
-          }
-          setBaDirty(true);
-        }
-      };
-      reader.readAsDataURL(file);
-    } finally {
-      setIsCompressingBA(null);
-    }
-  };
-
-  const handleSaveBeforeAfter = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!baBeforeImage || !baAfterImage) {
-      showToast("يرجى التأكد من وجود صورة للمكان قبل العمل وصورة بعد التركيب", "error");
-      return;
-    }
-
-    if (!auth.currentUser) {
-      showToast("انتهت جلسة تسجيل الدخول، يرجى تسجيل الدخول بحساب المدير أولاً", "error");
-      return;
-    }
-
-    setIsSavingBA(true);
-    setBaSuccessMsg('');
-
-    try {
-      // 1. Strict compression check: ensure both images are lightweight (<= 300,000 characters)
-      const beforeCompressed = await compressDataUrl(baBeforeImage, 1080, 0.78, 300000);
-      const afterCompressed = await compressDataUrl(baAfterImage, 1080, 0.78, 300000);
-
-      let finalBefore = beforeCompressed.dataUrl;
-      let finalAfter = afterCompressed.dataUrl;
-      const beforeBlob = baBeforeBlob || beforeCompressed.blob;
-      const afterBlob = baAfterBlob || afterCompressed.blob;
-
-      const cleanTitle = baTitle.trim() || BEFORE_AFTER_ITEMS[0].title;
-
-      // 3. Save to Firestore (cloud sync fallback)
-      try {
-        await setDoc(doc(db, 'before_after', 'main'), {
-          beforeImage: finalBefore,
-          afterImage: finalAfter,
-          title: cleanTitle,
-          aspectRatio: baAspectRatio,
-          fitMode: baFitMode,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-
-        // Sync sub-documents
-        await Promise.all([
-          setDoc(doc(db, 'before_after', 'before'), {
-            image: finalBefore,
-            updatedAt: serverTimestamp()
-          }, { merge: true }),
-          setDoc(doc(db, 'before_after', 'after'), {
-            image: finalAfter,
-            updatedAt: serverTimestamp()
-          }, { merge: true })
-        ]);
-      } catch (cloudErr) {
-        throw cloudErr;
-      }
-
-      // 4. Update local states & cache now that cloud Firestore is safely committed
-      setBaBeforeImage(finalBefore);
-      setBaAfterImage(finalAfter);
-      setBaDirty(false);
-
-      try {
-        localStorage.setItem('alamin_before_after', JSON.stringify({
-          beforeImage: finalBefore,
-          afterImage: finalAfter,
-          title: cleanTitle,
-          aspectRatio: baAspectRatio,
-          fitMode: baFitMode
-        }));
-      } catch (e) {}
-
-      setBaSuccessMsg("تم حفظ صور قبل وبعد بنجاح وتم نشرها على كافة الأجهزة والموقع فوراً!");
-      await logActivity('before_after', `تحديث صور مقارنة قبل وبعد: "${cleanTitle}"`);
-      showToast("تم حفظ صور قبل وبعد وتحديث الموقع بنجاح!", "success");
-    } catch (error: any) {
-      console.error("Firestore before/after save error:", error);
-      showToast(`تعذر حفظ الصور في السيرفر: ${error?.message || 'يرجى مراجعة اتصال الإنترنت'}`, "error");
-    } finally {
-      setIsSavingBA(false);
-    }
-  };
-
-  const handleConfirmResetBeforeAfter = async () => {
-    setShowResetBAConfirm(false);
-    setIsSavingBA(true);
-    const defaultData = {
-      beforeImage: BEFORE_AFTER_ITEMS[0].beforeImage,
-      afterImage: BEFORE_AFTER_ITEMS[0].afterImage,
-      title: BEFORE_AFTER_ITEMS[0].title,
-      aspectRatio: '4/3',
-      fitMode: 'contain'
-    };
-
-    setBaBeforeImage(defaultData.beforeImage);
-    setBaAfterImage(defaultData.afterImage);
-    setBaTitle(defaultData.title);
-    setBaAspectRatio('4/3');
-    setBaFitMode('contain');
-    setBaDirty(false);
-
-    try {
-      localStorage.setItem('alamin_before_after', JSON.stringify(defaultData));
-      await Promise.all([
-        setDoc(doc(db, 'before_after', 'main'), {
-          ...defaultData,
-          updatedAt: serverTimestamp()
-        }, { merge: true }),
-        setDoc(doc(db, 'before_after', 'before'), {
-          image: defaultData.beforeImage,
-          updatedAt: serverTimestamp()
-        }, { merge: true }),
-        setDoc(doc(db, 'before_after', 'after'), {
-          image: defaultData.afterImage,
-          updatedAt: serverTimestamp()
-        }, { merge: true })
-      ]);
-      await logActivity('before_after', 'استعادة الصور الافتراضية لقسم قبل وبعد');
-      showToast("تمت استعادة الصور الأصلية بنجاح ونشرها!", "success");
-    } catch (e: any) {
-      console.warn("Reset notice:", e);
-      showToast("تمت استعادة الصور الأصلية محلياً", "success");
-    } finally {
-      setIsSavingBA(false);
-    }
-  };
-
-  // Slider Test handler
-  const updateTestPosition = useCallback((clientX: number) => {
-    if (!testSliderRef.current) return;
-    const rect = testSliderRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const position = Math.max(0, Math.min(100, (x / rect.width) * 100));
-    setTestSliderPos(position);
-  }, []);
 
   // Filtered Leads
   const filteredLeads = leads.filter(l => {
@@ -1374,9 +1148,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
                       <ArrowLeftRight size={20} />
                     </div>
                   </div>
-                  <div className="text-3xl sm:text-4xl font-black text-white mb-2">{BEFORE_AFTER_ITEMS.length}</div>
-                  <p className="text-xs text-slate-400 truncate font-semibold" title={baTitle}>
-                    {baTitle}
+                  <div className="text-3xl sm:text-4xl font-black text-white mb-2">{1}</div>
+                  <p className="text-xs text-slate-400 truncate font-semibold" title={staticComparison.title}>
+                    {staticComparison.title}
                   </p>
                 </div>
 
@@ -2140,320 +1914,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
         {/* TAB 3: BEFORE & AFTER MANAGEMENT */}
         {/* ----------------------------------------------------------------- */}
         {activeTab === 'beforeAfter' && (
-          <div className="max-w-4xl mx-auto space-y-8">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
-              <div className="flex items-center gap-2.5 mb-6 pb-4 border-b border-slate-800">
-                <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl flex items-center justify-center">
-                  <ArrowLeftRight size={20} />
-                </div>
-                <div>
-                  <h3 className="font-black text-lg text-white">إدارة صور مقارنة قبل وبعد</h3>
-                  <p className="text-xs text-slate-400">عدل صورة المكان قبل البدء وصورة النتيجة بعد التركيب لاطلاع الزوار على جودة التنفيذ.</p>
-                </div>
-              </div>
-
-              <form onSubmit={handleSaveBeforeAfter} className="space-y-6">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-2">عنوان التحول *</label>
-                  <input
-                    type="text"
-                    value={baTitle}
-                    onChange={(e) => {
-                      setBaTitle(e.target.value);
-                      setBaDirty(true);
-                    }}
-                    placeholder="مثال: تحويل روف خرساني إلى واحة استجمام فندقية"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:border-amber-500 outline-none"
-                  />
-                </div>
-
-                {/* Upload Cards Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Before Upload */}
-                  <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
-                        صورة قبل العمل
-                      </span>
-                      {isCompressingBA === 'before' && (
-                        <span className="text-[10px] text-amber-400 font-bold flex items-center gap-1">
-                          <Loader2 size={12} className="animate-spin" /> جاري الضغط...
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-900 border border-slate-800">
-                      <img src={baBeforeImage} alt="قبل العمل" className="w-full h-full object-cover" />
-                    </div>
-
-                    <label className="block">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleSelectBAFile(e, 'before')}
-                        disabled={isSavingBA || isCompressingBA !== null}
-                        className="w-full text-xs text-slate-400 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-800 file:text-white hover:file:bg-amber-500 hover:file:text-slate-950 file:cursor-pointer cursor-pointer"
-                      />
-                    </label>
-                  </div>
-
-                  {/* After Upload */}
-                  <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-4 space-y-3 bg-amber-500/[0.02]">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-amber-400 flex items-center gap-2">
-                        <Sparkles size={14} />
-                        صورة بعد التركيب
-                      </span>
-                      {isCompressingBA === 'after' && (
-                        <span className="text-[10px] text-amber-400 font-bold flex items-center gap-1">
-                          <Loader2 size={12} className="animate-spin" /> جاري الضغط...
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-900 border border-amber-500/30">
-                      <img src={baAfterImage} alt="بعد التركيب" className="w-full h-full object-cover" />
-                    </div>
-
-                    <label className="block">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleSelectBAFile(e, 'after')}
-                        disabled={isSavingBA || isCompressingBA !== null}
-                        className="w-full text-xs text-slate-400 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-500 file:text-slate-950 hover:file:bg-amber-400 file:cursor-pointer cursor-pointer"
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                {/* Visual Fit Mode & Aspect Ratio Options */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                  {/* Option 1: Fit Mode */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-2">
-                      طريقة عرض وملاءمة الصور داخل السلايدر:
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => { setBaFitMode('contain'); setBaDirty(true); }}
-                        className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
-                          baFitMode === 'contain'
-                            ? 'bg-amber-500/20 border-amber-500 text-white ring-1 ring-amber-500'
-                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-black text-amber-400">احتواء كامل (Smart Fit) ✨</span>
-                          {baFitMode === 'contain' && <CheckCircle2 size={14} className="text-amber-400" />}
-                        </div>
-                        <p className="text-[10px] text-slate-400 leading-tight">
-                          إظهار الصورة كاملة 100% دون قص أي جزء من البرجولة مع خلفية ضبابية فخمة تملأ الجوانب.
-                        </p>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => { setBaFitMode('cover'); setBaDirty(true); }}
-                        className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
-                          baFitMode === 'cover'
-                            ? 'bg-amber-500/20 border-amber-500 text-white ring-1 ring-amber-500'
-                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-black text-amber-400">ملء الإطار (Cover)</span>
-                          {baFitMode === 'cover' && <CheckCircle2 size={14} className="text-amber-400" />}
-                        </div>
-                        <p className="text-[10px] text-slate-400 leading-tight">
-                          ملء كامل مساحة الإطار مع قص الحواف الزائدة لتغطية الإطار كلياً.
-                        </p>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Option 2: Frame Aspect Ratio */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-2">
-                      أبعاد إطار السلايدر (نسبة العرض للارتفاع):
-                    </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {[
-                        { id: '4/3', label: '4:3 متوازن', desc: 'الأفضل للبرجولات' },
-                        { id: '16/10', label: '16:10 معتدل', desc: 'شاشة متناسقة' },
-                        { id: '16/9', label: '16:9 عريض', desc: 'مساحات أفقية' },
-                        { id: '3/4', label: '3:4 طولي', desc: 'لصور الموبايل' }
-                      ].map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => { setBaAspectRatio(item.id as any); setBaDirty(true); }}
-                          className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                            baAspectRatio === item.id
-                              ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-md'
-                              : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white text-xs font-bold'
-                          }`}
-                        >
-                          <span className="block text-xs">{item.label}</span>
-                          <span className={`block text-[9px] mt-0.5 ${baAspectRatio === item.id ? 'text-slate-900 font-bold' : 'text-slate-500'}`}>
-                            {item.desc}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {baSuccessMsg && (
-                  <div className="p-3 bg-emerald-950/60 border border-emerald-800/80 rounded-xl text-emerald-300 text-xs font-bold text-center">
-                    {baSuccessMsg}
-                  </div>
-                )}
-
-                {/* Save & Reset Buttons */}
-                <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                  <button
-                    type="submit"
-                    disabled={isSavingBA || isCompressingBA !== null}
-                    className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 py-3.5 px-6 rounded-xl font-black text-xs sm:text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-amber-500/20"
-                  >
-                    {isSavingBA ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        <span>جاري الحفظ وتحديث الموقع...</span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 size={16} />
-                        <span>حفظ ونشر التعديلات فوراً على الموقع</span>
-                      </>
-                    )}
-                  </button>
-
-                  {showResetBAConfirm ? (
-                    <div className="bg-slate-800 border border-amber-500/40 rounded-xl p-2.5 flex items-center gap-2">
-                      <span className="text-xs text-slate-200 font-bold">استعادة الصور الأصلية؟</span>
-                      <button
-                        type="button"
-                        onClick={handleConfirmResetBeforeAfter}
-                        className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-colors"
-                      >
-                        نعم
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowResetBAConfirm(false)}
-                        className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-colors"
-                      >
-                        إلغاء
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setShowResetBAConfirm(true)}
-                      disabled={isSavingBA}
-                      className="bg-slate-800 hover:bg-slate-700 text-slate-300 py-3.5 px-5 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <RotateCcw size={14} />
-                      <span>استعادة الصور الأصلية</span>
-                    </button>
-                  )}
-                </div>
-              </form>
+          <section className="max-w-4xl mx-auto space-y-6" aria-label="صور قبل وبعد المنشورة">
+            <h3 className="font-black text-xl text-white">صور قبل وبعد المنشورة</h3>
+            <p className="text-slate-300">هذا القسم يعرض الصورتين الثابتتين المنشورتين مع الموقع. تغييرهما يحتاج تحديث ملفات الموقع وإعادة النشر.</p>
+            <div className="grid sm:grid-cols-2 gap-6">
+              <figure><img src={staticComparison.beforeImage} alt="قبل العمل" className="rounded-2xl w-full" /><figcaption className="mt-2 text-white">قبل العمل</figcaption></figure>
+              <figure><img src={staticComparison.afterImage} alt="بعد التركيب" className="rounded-2xl w-full" /><figcaption className="mt-2 text-white">بعد التركيب</figcaption></figure>
             </div>
-
-            {/* Live Interactive Preview Box */}
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                  <Eye size={16} className="text-amber-400" />
-                  <span>معاينة حية وتجربة السلايدر التفاعلي كما سيظهر للعميل</span>
-                </h4>
-                <span className="text-[11px] text-slate-400">اسحب المؤشر للمقارنة</span>
-              </div>
-
-              <div
-                ref={testSliderRef}
-                onMouseMove={(e) => updateTestPosition(e.clientX)}
-                onTouchMove={(e) => e.touches[0] && updateTestPosition(e.touches[0].clientX)}
-                className={`relative w-full rounded-2xl overflow-hidden select-none cursor-ew-resize border border-slate-800 shadow-2xl bg-slate-950 transition-all ${
-                  baAspectRatio === '4/3' ? 'aspect-[4/3] max-w-2xl mx-auto' :
-                  baAspectRatio === '16/10' ? 'aspect-[16/10] max-w-3xl mx-auto' :
-                  baAspectRatio === '3/4' ? 'aspect-[3/4] max-w-md mx-auto' :
-                  'aspect-[16/9] max-w-3xl mx-auto'
-                }`}
-              >
-                {/* Ambient Blurred Background for contain mode */}
-                {baFitMode === 'contain' && (
-                  <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img
-                      src={baAfterImage}
-                      alt=""
-                      className="w-full h-full object-cover blur-2xl scale-125 opacity-35 brightness-75"
-                    />
-                  </div>
-                )}
-
-                {/* AFTER Image (Background) */}
-                <img
-                  src={baAfterImage}
-                  alt="بعد التركيب"
-                  className={`absolute inset-0 w-full h-full pointer-events-none ${
-                    baFitMode === 'contain' ? 'object-contain' : 'object-cover'
-                  }`}
-                />
-
-                {/* BEFORE Image (Clipped Overlay) */}
-                <div
-                  className="absolute inset-0 overflow-hidden pointer-events-none"
-                  style={{ clipPath: `inset(0 ${100 - testSliderPos}% 0 0)` }}
-                >
-                  {baFitMode === 'contain' && (
-                    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                      <img
-                        src={baBeforeImage}
-                        alt=""
-                        className="w-full h-full object-cover blur-2xl scale-125 opacity-35 brightness-75"
-                      />
-                    </div>
-                  )}
-                  <img
-                    src={baBeforeImage}
-                    alt="قبل العمل"
-                    className={`absolute inset-0 w-full h-full pointer-events-none ${
-                      baFitMode === 'contain' ? 'object-contain' : 'object-cover'
-                    }`}
-                  />
-                  <span className="absolute top-4 right-4 bg-slate-950/80 backdrop-blur-md text-white px-3 py-1 rounded-full text-xs font-bold border border-white/10 z-10">
-                    قبل العمل
-                  </span>
-                </div>
-
-                <span className="absolute top-4 left-4 bg-amber-500 text-slate-950 px-3 py-1 rounded-full text-xs font-black shadow-lg z-10">
-                  بعد التركيب ✨
-                </span>
-
-                {/* Slider Handle Divider */}
-                <div
-                  className="absolute top-0 bottom-0 w-1 bg-white shadow-2xl pointer-events-none z-20"
-                  style={{ left: `${testSliderPos}%` }}
-                >
-                  <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-8 h-8 bg-white text-slate-900 rounded-full shadow-2xl flex items-center justify-center border-2 border-amber-500">
-                    <ArrowLeftRight size={14} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
+          </section>
         )}
 
-        {/* ----------------------------------------------------------------- */}
-        {/* TAB 4: ACTIVITY LOG */}
-        {/* ----------------------------------------------------------------- */}
         {activeTab === 'activity' && (
           <div className="space-y-6">
             {/* Header & Filter Toolbar */}
