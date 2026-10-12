@@ -33,81 +33,54 @@ export const Gallery: React.FC<{ initialCategory?: string }> = ({ initialCategor
 
   useEffect(() => {
     let isMounted = true;
-
-    // Load gallery data from Firestore (with resilient timeout)
-    const loadGalleryData = async () => {
-      try {
-        const [{ db }, { collection, getDocs, doc, getDoc }] = await Promise.all([import('../firebase'), import('firebase/firestore')]);
-        if (!isMounted) return;
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Public Gallery fetch timeout')), 15000)
-        );
-
-        const fetchAllPromise = Promise.all([
-          getDocs(collection(db, 'gallery')),
-          getDocs(collection(db, 'deleted_static_images')),
-          getDoc(doc(db, 'gallery_order', 'main'))
-        ]);
-
-        const [gallerySnap, deletedSnap, orderSnap] = (await Promise.race([
-          fetchAllPromise,
-          timeoutPromise
-        ])) as any;
-
-        if (!isMounted) return;
-
-        // 1. Process Gallery Items (Handles additions, updates, and complete deletions)
-        if (gallerySnap) {
-          const items: Project[] = gallerySnap.docs.map((docSnap: any) => {
-            const data = docSnap.data();
-            return {
-              id: docSnap.id,
-              ...data,
-              isFirestore: true,
-              syncStatus: 'synced',
-              order: typeof data.order === 'number' ? data.order : undefined
-            };
-          });
-
-          resolveProjectsImages(items).then(resolved => {
-            if (isMounted) {
-              setFirestoreProjects(resolved);
-              saveLocalGallery(resolved);
-            }
-          });
-        }
-
-        // 2. Process Deleted Static Images
-        if (deletedSnap) {
-          const ids = deletedSnap.docs.map((docSnap: any) => Number(docSnap.id));
-          setDeletedStaticIds(ids);
-          saveLocalDeletedStaticIds(ids);
-        }
-
-        // 3. Process Custom Order
-        if (orderSnap && orderSnap.exists()) {
-          const data = orderSnap.data();
-          if (Array.isArray(data.orderIds)) {
-            setCustomOrderIds(data.orderIds);
-            saveLocalOrder(data.orderIds);
-          }
-        }
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.warn("[Public Gallery] Fetch notice (offline/quota mode - preserving cached/curated):", error);
-        }
-      }
+    const unsubscribers: (() => void)[] = [];
+    const notice = (error: unknown) => {
+      console.warn('[Public Gallery] Cloud update unavailable; keeping existing photos:', error);
     };
 
-    // Load immediately so visitors on any device see all new photos without delay
-    const observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) { observer.disconnect(); loadGalleryData(); }
-    }, { rootMargin: '400px' });
-    if (sectionRef.current) observer.observe(sectionRef.current);
+    // Independent live subscriptions: a delayed order/deletion read must never
+    // discard successful photo reads. Firestore reconnects after network changes.
+    const loadGalleryData = async () => {
+      try {
+        const [{ db }, { collection, onSnapshot, doc }] = await Promise.all([import('../firebase'), import('firebase/firestore')]);
+        if (!isMounted) return;
+        let imageRevision = 0;
+        unsubscribers.push(onSnapshot(collection(db, 'gallery'), snapshot => {
+          const revision = ++imageRevision;
+          const items: Project[] = snapshot.docs.map(docSnap => {
+            const data = docSnap.data();
+            return { ...data, id: docSnap.id, isFirestore: true, syncStatus: 'synced',
+              order: typeof data.order === 'number' ? data.order : undefined } as Project;
+          });
+          // Never replace cached photos with an empty, non-authoritative cache snapshot.
+          if (snapshot.metadata.fromCache && items.length === 0) return;
+          void resolveProjectsImages(items).then(resolved => {
+            if (!isMounted || revision !== imageRevision) return;
+            setFirestoreProjects(resolved);
+            saveLocalGallery(resolved);
+          }).catch(notice);
+        }, notice));
+        unsubscribers.push(onSnapshot(collection(db, 'deleted_static_images'), snapshot => {
+          if (!isMounted || snapshot.metadata.fromCache) return;
+          const ids = snapshot.docs.map(docSnap => Number(docSnap.id));
+          setDeletedStaticIds(ids);
+          saveLocalDeletedStaticIds(ids);
+        }, notice));
+        unsubscribers.push(onSnapshot(doc(db, 'gallery_order', 'main'), snapshot => {
+          if (!isMounted || snapshot.metadata.fromCache) return;
+          const ids = snapshot.exists() && Array.isArray(snapshot.data().orderIds)
+            ? snapshot.data().orderIds : [];
+          setCustomOrderIds(ids);
+          saveLocalOrder(ids);
+        }, notice));
+      } catch (error) { notice(error); }
+    };
 
+    // Begin while the visitor reads the hero, not only after reaching the gallery.
+    void loadGalleryData();
     return () => {
       isMounted = false;
-      observer.disconnect();
+      unsubscribers.forEach(unsubscribe => unsubscribe());
     };
   }, []);
 
