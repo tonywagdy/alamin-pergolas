@@ -643,7 +643,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
       setCompressedBlob(null);
       setCompressionInfo(null);
 
-      showToast("تمت إضافة المشروع للمعرض بنجاح وبسرعة فائقة!", "success");
+      if (newProj.syncStatus === 'synced') {
+        showToast("تم حفظ الصورة على السيرفر ونشرها في المعرض.", "success");
+      } else {
+        showToast("الصورة محفوظة على هذا الجهاز فقط ولم تُنشر بعد. راجع حالة المزامنة وأعد المحاولة.", "error");
+      }
     } catch (error: any) {
       console.error("Upload error:", error);
       showToast(`حدث خطأ أثناء الإضافة: ${error?.message || 'يرجى المحاولة مرة أخرى'}`, "error");
@@ -657,7 +661,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onBackToPublicSite }) 
     try {
       showToast("جاري المزامنة ورفع الصور للسيرفر السحابي الآن...", "success");
       await runSyncQueue(true);
-      showToast("تمت مزامنة وحفظ جميع الصور في السيرفر بنجاح!", "success");
+      const remaining = getCurrentSyncState();
+      if (remaining.pendingCount > 0 || remaining.isSyncing) {
+        showToast(remaining.lastError ? `لم تكتمل المزامنة: ${remaining.lastError}` : "لم تكتمل المزامنة بعد. توجد صور أو تغييرات لم تصل للسيرفر.", "error");
+      } else {
+        showToast("اكتملت المزامنة ولا توجد تغييرات معلقة.", "success");
+      }
     } catch (err: any) {
       showToast(`فشلت المزامنة: ${err?.message || 'يرجى المحاولة مجدداً'}`, "error");
     }

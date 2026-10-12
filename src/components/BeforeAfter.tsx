@@ -6,6 +6,8 @@ export const BeforeAfter: React.FC = () => {
   const [sliderPosition, setSliderPosition] = useState<number>(50);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const sectionRef = useRef<HTMLElement>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const [loadState, setLoadState] = useState<'loading' | 'live' | 'error'>('loading');
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Dynamic Before & After item with local storage caching for immediate 0ms render
@@ -29,30 +31,74 @@ export const BeforeAfter: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true;
-
     let unsubscribe: (() => void) | undefined;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let retries = 0;
+    let requestRevision = 0;
+    setLoadState('loading');
+
+    const onError = (error: unknown) => {
+      if (!isMounted) return;
+      console.warn('[BeforeAfter] Latest comparison could not load:', error);
+      setLoadState('error');
+      if (retries < 3 && !retryTimer) {
+        const delay = [2000, 5000, 15000][retries++];
+        retryTimer = setTimeout(() => {
+          retryTimer = undefined;
+          void observeImages();
+        }, delay);
+      }
+    };
     const observeImages = async () => {
+      const revision = ++requestRevision;
+      unsubscribe?.();
+      unsubscribe = undefined;
       try {
         const [{ db }, { doc, onSnapshot }] = await Promise.all([import('../firebase'), import('firebase/firestore')]);
-        if (!isMounted) return;
-        unsubscribe = onSnapshot(doc(db, 'before_after', 'main'), snapshot => {
-          if (!isMounted || !snapshot.exists()) return;
+        if (!isMounted || revision !== requestRevision) return;
+        unsubscribe = onSnapshot(doc(db, 'before_after', 'main'), { includeMetadataChanges: true }, snapshot => {
+          if (!isMounted || revision !== requestRevision) return;
+          const fromCache = snapshot.metadata.fromCache;
+          if (!snapshot.exists()) {
+            if (!fromCache) setLoadState('live');
+            return;
+          }
           const data = snapshot.data();
-          if (!data.beforeImage || !data.afterImage) return;
+          if (typeof data.beforeImage !== 'string' || !data.beforeImage ||
+              typeof data.afterImage !== 'string' || !data.afterImage) {
+            if (!fromCache) onError(new Error('Published comparison is incomplete'));
+            return;
+          }
           setCurrentItem(prev => {
             const updated = { ...prev, ...data, aspectRatio: data.aspectRatio || '4/3', fitMode: data.fitMode || 'contain' };
             try { localStorage.setItem('alamin_before_after', JSON.stringify(updated)); } catch {}
             return updated;
           });
-        }, () => {});
-      } catch {}
+          if (!fromCache) {
+            retries = 0;
+            if (retryTimer) clearTimeout(retryTimer);
+            retryTimer = undefined;
+            setLoadState('live');
+          }
+        }, error => { if (revision === requestRevision) onError(error); });
+      } catch (error) { if (revision === requestRevision) onError(error); }
     };
-    const observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) { observer.disconnect(); observeImages(); }
-    }, { rootMargin: '400px' });
-    if (sectionRef.current) observer.observe(sectionRef.current);
-    return () => { isMounted = false; observer.disconnect(); unsubscribe?.(); };
-  }, []);
+    const retryOnline = () => {
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = undefined;
+      retries = 0;
+      setLoadState('loading');
+      void observeImages();
+    };
+    void observeImages();
+    window.addEventListener('online', retryOnline);
+    return () => {
+      isMounted = false;
+      unsubscribe?.();
+      if (retryTimer) clearTimeout(retryTimer);
+      window.removeEventListener('online', retryOnline);
+    };
+  }, [refreshVersion]);
 
   const updatePosition = useCallback((clientX: number) => {
     if (!containerRef.current) return;
@@ -113,6 +159,12 @@ export const BeforeAfter: React.FC = () => {
         </div>
 
         <div className="max-w-4xl mx-auto">
+          {loadState !== 'live' && (
+            <div role="status" className="mb-4 text-center text-sm text-[#143d6a]">
+              {loadState === 'loading' ? 'جارٍ جلب أحدث صور قبل وبعد…' : 'تعذر جلب أحدث الصور. الصور المعروضة قد تكون نسخة سابقة.'}
+              {loadState === 'error' && <button type="button" onClick={() => setRefreshVersion(version => version + 1)} className="mr-3 underline font-bold">إعادة المحاولة</button>}
+            </div>
+          )}
           {/* Main Interactive Comparison Box */}
           <div
             ref={containerRef}

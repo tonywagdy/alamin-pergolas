@@ -533,6 +533,11 @@ export async function enqueueNewUpload(params: {
   } catch (cloudErr: any) {
     console.warn('[Gallery] Direct upload failed, keeping in offline retry queue:', cloudErr);
     newProject.syncStatus = 'pending';
+    newProject.lastError = cloudErr?.message || 'Cloud publication failed';
+    lastSyncError = newProject.lastError;
+    const pendingList = getLocalGallery().map(p => p.id === localId ? { ...p, syncStatus: 'pending' as SyncStatus, lastError: newProject.lastError } : p);
+    saveLocalGallery(pendingList);
+    notifyGalleryListeners(pendingList);
     const uploadTask: PendingUploadTask = {
       id: localId,
       title: params.title.trim(),
@@ -541,7 +546,8 @@ export async function enqueueNewUpload(params: {
       order: newProject.order || 0,
       createdAt: newProject.createdAt,
       retryCount: 0,
-      nextRetryTime: Date.now() + 5000
+      nextRetryTime: Date.now() + 5000,
+      lastError: newProject.lastError
     };
     saveUploadQueue([uploadTask, ...getUploadQueue().filter(t => t.id !== localId)]);
     notifySyncListeners();
@@ -697,12 +703,14 @@ export function enqueueLocalActivity(
 // 7. BACKGROUND SYNC WORKER
 // ============================================================================
 
+export function preserveNewUploads<T extends { id: string }>(processed: T[], remaining: T[], current: T[]): T[] {
+  const processedIds = new Set(processed.map(task => task.id));
+  return [...remaining, ...current.filter(task => !processedIds.has(task.id))];
+}
+
 export async function runSyncQueue(force: boolean = false): Promise<void> {
-  if (force) {
-    isSyncRunning = false;
-  } else if (isSyncRunning) {
-    return;
-  }
+  // A forced retry skips backoff; it must never start a second concurrent worker.
+  if (isSyncRunning) return;
   isSyncRunning = true;
   notifySyncListeners();
 
@@ -814,7 +822,8 @@ export async function runSyncQueue(force: boolean = false): Promise<void> {
       }
     }
 
-    saveUploadQueue(remainingUploads);
+    // Preserve uploads queued while this worker was awaiting a remote write.
+    saveUploadQueue(preserveNewUploads(uploadQueue, remainingUploads, getUploadQueue()));
 
     // -------------------------------------------------------------
     // B. Process Pending Reorder
