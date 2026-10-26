@@ -6,7 +6,13 @@ const ALLOWED_PARAMETERS = new Set(['source', 'service', 'lead_id', 'landing_pag
 const gaId = (import.meta.env || {} as ImportMetaEnv).VITE_GA_MEASUREMENT_ID || '';
 const adsId = (import.meta.env || {} as ImportMetaEnv).VITE_GOOGLE_ADS_ID || '';
 const adsLabel = (import.meta.env || {} as ImportMetaEnv).VITE_GOOGLE_ADS_LEAD_LABEL || '';
+const adsWhatsAppLabel = (import.meta.env || {} as ImportMetaEnv).VITE_GOOGLE_ADS_WHATSAPP_LABEL || '';
+const adsPhoneLabel = (import.meta.env || {} as ImportMetaEnv).VITE_GOOGLE_ADS_PHONE_LABEL || '';
+const conversionLabels: Record<string, string> = {
+  generate_lead: adsLabel, whatsapp_click: adsWhatsAppLabel, phone_call_click: adsPhoneLabel
+};
 let loaded = false;
+const isAdminPage = () => window.location.pathname.startsWith('/admin') || window.location.hash === '#admin';
 
 export function getConsent(): Consent | null {
   try { const value = localStorage.getItem(CONSENT_KEY); return value === 'granted' || value === 'denied' ? value : null; }
@@ -23,7 +29,7 @@ function gtag(): Gtag {
 }
 
 function loadTags() {
-  if (loaded || getConsent() !== 'granted' || !isMeasurementConfigured || window.location.pathname.startsWith('/admin')) return;
+  if (loaded || getConsent() !== 'granted' || !isMeasurementConfigured || isAdminPage()) return;
   loaded = true;
   const tag = gtag();
   tag('js', new Date());
@@ -38,16 +44,21 @@ function loadTags() {
 }
 
 export function initializeMeasurement() {
-  const tag = gtag();
-  tag('consent', 'default', { analytics_storage: 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
-  if (getConsent() === 'granted') setConsent('granted');
+  // Measurement must never prevent the application from rendering.
+  try {
+    const tag = gtag();
+    tag('consent', 'default', { analytics_storage: 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
+    if (getConsent() === 'granted') setConsent('granted');
+  } catch { /* Tracking can be unavailable or blocked; the site still works. */ }
 }
 
 export function setConsent(choice: Consent) {
   try { localStorage.setItem(CONSENT_KEY, choice); } catch {}
-  gtag()('consent', 'update', { analytics_storage: choice, ad_storage: choice,
-    ad_user_data: 'denied', ad_personalization: 'denied' });
-  if (choice === 'granted') loadTags();
+  try {
+    gtag()('consent', 'update', { analytics_storage: choice, ad_storage: choice,
+      ad_user_data: 'denied', ad_personalization: 'denied' });
+    if (choice === 'granted') loadTags();
+  } catch { loaded = false; }
   window.dispatchEvent(new Event('alamin-consent-change'));
 }
 
@@ -57,11 +68,17 @@ export function safeEventParameters(params: Record<string, unknown>) {
 }
 
 export function trackEvent(name: string, params: Record<string, unknown> = {}) {
-  if (!ALLOWED_EVENTS.has(name) || !loaded || getConsent() !== 'granted') return;
-  const safe = safeEventParameters(params);
-  gtag()('event', name, { ...safe, page_location: location.origin + location.pathname });
-  if (name === 'generate_lead' && /^AW-\d+$/.test(adsId) && /^[A-Za-z0-9_-]+$/.test(adsLabel)) {
-    gtag()('event', 'conversion', { send_to: `${adsId}/${adsLabel}`, transaction_id: safe.lead_id,
-      page_location: location.origin + location.pathname });
-  }
+  // A tag failure must not interrupt a WhatsApp link, call, or saved lead.
+  try {
+    if (!ALLOWED_EVENTS.has(name) || !loaded || getConsent() !== 'granted' || isAdminPage()) return;
+    const safe = safeEventParameters(params);
+    const page = location.origin + location.pathname;
+    gtag()('event', name, { ...safe, page_location: page });
+    const label = conversionLabels[name];
+    if (/^AW-\d+$/.test(adsId) && /^[A-Za-z0-9_-]+$/.test(label || '')) {
+      gtag()('event', 'conversion', { send_to: `${adsId}/${label}`,
+        ...(name === 'generate_lead' && safe.lead_id ? { transaction_id: safe.lead_id } : {}),
+        page_location: page });
+    }
+  } catch { /* Customer actions are independent of analytics availability. */ }
 }
